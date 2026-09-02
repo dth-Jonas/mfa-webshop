@@ -28,7 +28,6 @@ export default function OrdersPage() {
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Lese Bestellungen aus localStorage oder Firebase (wie bisher implementiert)
     const savedOrders = localStorage.getItem('user_orders');
     if (savedOrders) {
       try {
@@ -73,44 +72,48 @@ export default function OrdersPage() {
     if (s === 'Storniert') styles = 'bg-red-50 text-red-700 border-red-200';
 
     return (
-      <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${styles}`}>
+      <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${styles} whitespace-nowrap`}>
         {s}
       </span>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <ShoppingBag className="text-blue-600" /> Meine Bestellungen
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Übersicht deiner getätigten Käufe und deren aktueller Status</p>
+    <div className="min-h-screen bg-gray-50 py-4 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Header für Mobile optimiert */}
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <ShoppingBag size={18} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Bestellungen</h1>
+              <p className="text-xs text-gray-500">Übersicht & Status</p>
+            </div>
           </div>
           <button
             onClick={() => router.push('/')}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 transition-all"
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-gray-100 px-3 py-2 rounded-xl hover:bg-gray-200 transition-colors"
           >
-            <ArrowLeft size={16} /> Zum Shop
+            <ArrowLeft size={14} /> Shop
           </button>
         </div>
 
         {orders.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
-            <Package size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">Keine Bestellungen vorhanden</h3>
-            <p className="text-sm text-gray-500 mt-1 mb-6">Du hast bisher noch keine Produkte bestellt.</p>
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+            <Package size={40} className="mx-auto text-gray-300 mb-3" />
+            <h3 className="text-base font-medium text-gray-900">Keine Bestellungen</h3>
+            <p className="text-xs text-gray-500 mt-1 mb-5">Du hast bisher noch nichts gekauft.</p>
             <button
               onClick={() => router.push('/')}
-              className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+              className="bg-blue-600 text-white w-full py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
             >
               Jetzt einkaufen
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {orders.map((order) => {
               const isExpanded = !!expandedOrders[order.id];
               const shortId = order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#ID';
@@ -119,69 +122,68 @@ export default function OrdersPage() {
               return (
                 <div 
                   key={order.id} 
-                  className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden transition-all hover:shadow-md"
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden transition-all"
                 >
                   <div 
                     onClick={() => toggleExpand(order.id)}
-                    className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer bg-white"
+                    className="p-4 flex flex-col gap-3 cursor-pointer active:bg-gray-50/50"
                   >
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                        <Package size={20} />
+                    {/* Zeile 1: ID, Status, Preis */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-gray-900 text-sm">{shortId}</span>
+                        {getStatusBadge(order.status)}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="font-bold text-gray-900">Bestell-ID: {shortId}</span>
-                          {getStatusBadge(order.status)}
-                        </div>
-                        <div className="text-xs text-gray-500 flex items-center gap-3 mt-1.5 flex-wrap">
-                          <span className="flex items-center gap-1"><Clock size={13} /> {formatDate(order.createdAt)}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1"><CreditCard size={13} /> Zahlung: <strong className="text-gray-700">{order.paymentMethod || 'offen'}</strong></span>
-                          <span>•</span>
-                          <span>{itemCount} {itemCount === 1 ? 'Artikel' : 'Artikel'}</span>
-                        </div>
-                      </div>
+                      <span className="text-base font-black text-gray-900">
+                        {order.totalAmount?.toFixed(2)} €
+                      </span>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-4 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                      <div className="text-right">
-                        <span className="text-xs text-gray-400 block sm:hidden">Gesamtsumme</span>
-                        <span className="text-lg font-bold text-gray-900">{order.totalAmount?.toFixed(2)} €</span>
+                    {/* Zeile 2: Meta-Infos (Datum, Zahlung, Artikelanzahl) */}
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-gray-100">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(order.createdAt)}</span>
+                        <span>•</span>
+                        <span>Zahlung: <strong className="text-gray-700">{order.paymentMethod || 'offen'}</strong></span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
-                          className="text-gray-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Bestellung aus Liste entfernen"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
-                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                        </div>
+                      <div className="flex items-center gap-2 text-gray-600 font-medium">
+                        <span>{itemCount} {itemCount === 1 ? 'Art.' : 'Art.'}</span>
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </div>
                     </div>
                   </div>
 
+                  {/* Aufklappbare Details für Mobile */}
                   {isExpanded && (
-                    <div className="bg-gray-50/70 border-t border-gray-100 p-5 space-y-4">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Bestellte Positionen</h4>
-                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+                    <div className="bg-gray-50/80 border-t border-gray-100 p-3.5 space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 px-1">
+                        Bestellte Artikel
+                      </div>
+                      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                         {order.items?.map((item, idx) => (
-                          <div key={idx} className="p-3.5 flex items-center justify-between text-sm">
-                            <div>
-                              <div className="font-semibold text-gray-900">{item.productName || item.name || 'Artikel'}</div>
-                              <div className="text-xs text-gray-500">
-                                {[item.size ? `Größe ${item.size}` : null, item.color].filter(Boolean).join(' • ') || 'Standard'}
+                          <div key={idx} className="p-3 flex items-center justify-between gap-2 text-xs">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-gray-900 truncate">{item.productName || item.name || 'Artikel'}</div>
+                              <div className="text-[11px] text-gray-500 truncate">
+                                {[item.size ? `Gr. ${item.size}` : null, item.color].filter(Boolean).join(' • ') || 'Standard'}
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="text-gray-600 text-xs">{item.quantity}x {item.price?.toFixed(2)} €</div>
+                            <div className="text-right shrink-0">
+                              <div className="text-gray-500 text-[11px]">{item.quantity}x {item.price?.toFixed(2)} €</div>
                               <div className="font-bold text-gray-900">{((item.price || 0) * item.quantity).toFixed(2)} €</div>
                             </div>
                           </div>
                         ))}
+                      </div>
+
+                      {/* Mobiler Löschen-Button */}
+                      <div className="pt-1 flex justify-end">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                          className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                        >
+                          <Trash2 size={14} /> Bestellung aus Historie entfernen
+                        </button>
                       </div>
                     </div>
                   )}
