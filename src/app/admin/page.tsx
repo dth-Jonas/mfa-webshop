@@ -1,5 +1,8 @@
 'use client';
 
+import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
 import Link from 'next/link';
 
 export default function AdminDashboardPage() {
