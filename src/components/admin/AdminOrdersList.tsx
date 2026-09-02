@@ -21,6 +21,7 @@ interface Order {
   totalAmount: number;
   status: string;
   paymentStatus?: string;
+  paymentMethod?: string;
   note?: string;
   items: OrderItem[];
 }
@@ -41,9 +42,6 @@ const formatDate = (dateVal: any) => {
     return 'Unbekanntes Datum';
   }
 };
-
-
-
 
 export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange }: any) {
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -103,8 +101,7 @@ export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange 
                     {order.totalAmount?.toFixed(2)} €
                   </td>
                   <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                    <!-- Admin Zahlungsart -->
-<select
+                    <select
                       value={order.status || 'Offen'}
                       onChange={(e) => onStatusChange && onStatusChange(order.id, 'status', e.target.value)}
                       className="bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-200 focus:outline-none"
