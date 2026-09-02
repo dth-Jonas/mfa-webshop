@@ -18,7 +18,17 @@ export async function getActiveOrderWindowId(): Promise<string | null> {
     const q = query(collection(db, COLLECTION_NAME), where('isActive', '==', true));
     const snapshot = await getDocs(q);
     if (!snapshot.empty) {
-      return snapshot.docs[0].id;
+      const now = new Date();
+      const activeDoc = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }) as OrderWindow).find(w => {
+        const start = new Date(w.startDate);
+        const end = new Date(w.endDate);
+        return w.isActive && start <= now && now <= end;
+      });
+
+      return activeDoc ? activeDoc.id : null;
     }
   } catch (err) {
     console.error('Fehler beim Abrufen des aktiven Zeitfensters:', err);
