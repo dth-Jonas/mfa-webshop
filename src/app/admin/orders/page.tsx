@@ -11,7 +11,7 @@ export default function AdminOrdersPage() {
 
   const fetchOrders = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const querySnapshot = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
       const fetchedOrders = querySnapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
