@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 interface OrderItem {
@@ -102,7 +102,27 @@ export default function OrdersPage() {
     if (s === 'Abgeschlossen') styles = 'bg-green-50 text-green-700 border-green-200';
     if (s === 'Storniert') styles = 'bg-red-50 text-red-700 border-red-200';
 
-    return (
+  
+  // Temporäre Funktion zum leeren aller Bestellungen
+  const handleClearAllOrders = async () => {
+    if (!window.confirm("Wirklich alle Bestellungen löschen?")) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'orders', document.id));
+      });
+      await batch.commit();
+      localStorage.removeItem('user_orders');
+      setOrders([]);
+      alert("Alle Bestellungen wurden erfolgreich gelöscht.");
+    } catch (e) {
+      console.error("Fehler beim Löschen aller Bestellungen:", e);
+      alert("Fehler beim Löschen.");
+    }
+  };
+
+  return (
       <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${styles} whitespace-nowrap`}>
         {s}
       </span>
@@ -110,12 +130,52 @@ export default function OrdersPage() {
   };
 
   if (loading) {
-    return (
+  
+  // Temporäre Funktion zum leeren aller Bestellungen
+  const handleClearAllOrders = async () => {
+    if (!window.confirm("Wirklich alle Bestellungen löschen?")) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'orders', document.id));
+      });
+      await batch.commit();
+      localStorage.removeItem('user_orders');
+      setOrders([]);
+      alert("Alle Bestellungen wurden erfolgreich gelöscht.");
+    } catch (e) {
+      console.error("Fehler beim Löschen aller Bestellungen:", e);
+      alert("Fehler beim Löschen.");
+    }
+  };
+
+  return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-sm text-gray-500 font-medium">Lade Bestellungen...</div>
       </div>
     );
   }
+
+
+  // Temporäre Funktion zum leeren aller Bestellungen
+  const handleClearAllOrders = async () => {
+    if (!window.confirm("Wirklich alle Bestellungen löschen?")) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'orders', document.id));
+      });
+      await batch.commit();
+      localStorage.removeItem('user_orders');
+      setOrders([]);
+      alert("Alle Bestellungen wurden erfolgreich gelöscht.");
+    } catch (e) {
+      console.error("Fehler beim Löschen aller Bestellungen:", e);
+      alert("Fehler beim Löschen.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 px-3 sm:px-6 lg:px-8">
@@ -131,12 +191,21 @@ export default function OrdersPage() {
               <p className="text-xs text-gray-500">Übersicht & aktueller Status</p>
             </div>
           </div>
-          <button
-            onClick={() => router.push('/')}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-gray-100 px-3 py-2 rounded-xl hover:bg-gray-200 transition-colors"
-          >
-            <ArrowLeft size={14} /> Shop
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearAllOrders}
+              className="text-xs font-medium text-red-600 bg-red-50 px-3 py-2 rounded-xl hover:bg-red-100 transition-colors"
+              title="Alle Testbestellungen löschen"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-gray-100 px-3 py-2 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              <ArrowLeft size={14} /> Shop
+            </button>
+          </div>
         </div>
 
         {orders.length === 0 ? (
@@ -159,7 +228,27 @@ export default function OrdersPage() {
               const shortId = order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#BESTELLUNG';
               const itemCount = order.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
-              return (
+            
+  // Temporäre Funktion zum leeren aller Bestellungen
+  const handleClearAllOrders = async () => {
+    if (!window.confirm("Wirklich alle Bestellungen löschen?")) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'orders', document.id));
+      });
+      await batch.commit();
+      localStorage.removeItem('user_orders');
+      setOrders([]);
+      alert("Alle Bestellungen wurden erfolgreich gelöscht.");
+    } catch (e) {
+      console.error("Fehler beim Löschen aller Bestellungen:", e);
+      alert("Fehler beim Löschen.");
+    }
+  };
+
+  return (
                 <div 
                   key={order.id} 
                   className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden transition-all"
