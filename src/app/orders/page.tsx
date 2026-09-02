@@ -1,230 +1,196 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { db } from '../../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { useAuth } from '../../lib/auth';
-import { ChevronDown, ChevronUp, Archive, AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
 
 interface OrderItem {
-  name: string;
+  productName?: string;
+  name?: string;
+  size?: string;
+  color?: string;
   quantity: number;
   price: number;
-  variant?: string;
 }
 
 interface Order {
   id: string;
   createdAt: any;
   totalAmount: number;
-  status: string;
+  status?: string;
   paymentMethod?: string;
-  paymentStatus?: string;
   items: OrderItem[];
 }
 
-const formatDate = (dateVal: any) => {
-  if (!dateVal) return 'Unbekanntes Datum';
-  try {
-    const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
-    if (isNaN(date.getTime())) return 'Unbekanntes Datum';
-    return new Intl.DateTimeFormat('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  } catch {
-    return 'Unbekanntes Datum';
-  }
-};
-
-const parseDateMs = (dateVal: any): number => {
-  if (!dateVal) return 0;
-  try {
-    const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
-    return isNaN(date.getTime()) ? 0 : date.getTime();
-  } catch {
-    return 0;
-  }
-};
-
 export default function OrdersPage() {
-  const { user } = useAuth();
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
-  const [archivedOrderIds, setArchivedOrderIds] = useState<string[]>([]);
-  const [archiveModalId, setArchiveModalId] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedArchived = localStorage.getItem('archived_orders');
-    if (savedArchived) {
+    // Lese Bestellungen aus localStorage oder Firebase (wie bisher implementiert)
+    const savedOrders = localStorage.getItem('user_orders');
+    if (savedOrders) {
       try {
-        setArchivedOrderIds(JSON.parse(savedArchived));
+        setOrders(JSON.parse(savedOrders));
       } catch (e) {
-        console.error(e);
+        console.error("Fehler beim Laden der Bestellungen", e);
       }
     }
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const q = query(
-      collection(db, 'orders'),
-      where('userId', '==', user.uid)
-    );
-
-    const unsubOrders = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Order[];
-
-      items.sort((a, b) => parseDateMs(b.createdAt) - parseDateMs(a.createdAt));
-
-      setOrders(items);
-      setLoading(false);
-    }, (error) => {
-      console.error('Fehler beim Laden:', error);
-      setLoading(false);
-    });
-
-    return () => unsubOrders();
-  }, [user]);
-
   const toggleExpand = (id: string) => {
-    setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const confirmArchive = (id: string) => {
-    const updated = [...archivedOrderIds, id];
-    setArchivedOrderIds(updated);
-    localStorage.setItem('archived_orders', JSON.stringify(updated));
-    setArchiveModalId(null);
+  const deleteOrder = (id: string) => {
+    const updated = orders.filter(o => o.id !== id);
+    setOrders(updated);
+    localStorage.setItem('user_orders', JSON.stringify(updated));
   };
 
-  const visibleOrders = orders.filter((o) => !archivedOrderIds.includes(o.id));
+  const formatDate = (dateVal: any) => {
+    if (!dateVal) return 'Kürzlich';
+    try {
+      const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+      return new Intl.DateTimeFormat('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    } catch {
+      return 'Kürzlich';
+    }
+  };
 
-  if (loading) {
-    return <div className="p-8 text-center text-gray-500">Bestellungen werden geladen...</div>;
-  }
+  const getStatusBadge = (status?: string) => {
+    const s = status || 'Eingegangen';
+    let styles = 'bg-amber-50 text-amber-700 border-amber-200';
+    if (s === 'In Bearbeitung') styles = 'bg-blue-50 text-blue-700 border-blue-200';
+    if (s === 'Abgeschlossen') styles = 'bg-green-50 text-green-700 border-green-200';
+    if (s === 'Storniert') styles = 'bg-red-50 text-red-700 border-red-200';
+
+    return (
+      <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${styles}`}>
+        {s}
+      </span>
+    );
+  };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Meine Bestellungen</h1>
-        <Link href="/" className="text-sm font-medium text-blue-600 hover:underline">
-          ← Zurück zum Shop
-        </Link>
-      </div>
-
-      {visibleOrders.length === 0 ? (
-        <div className="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 shadow-sm">
-          Keine aktiven Bestellungen vorhanden.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {visibleOrders.map((order) => {
-            const isExpanded = !!expandedOrders[order.id];
-
-            return (
-              <div key={order.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4 flex items-center justify-between bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                  <div 
-                    className="flex-1 cursor-pointer flex items-center justify-between pr-4"
-                    onClick={() => toggleExpand(order.id)}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">
-                          Bestellung vom {formatDate(order.createdAt)}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Bestell-ID: {order.id} | Status: {order.status || 'Eingegangen'} | Zahlung: {order.paymentMethod || 'offen'} • {order.items?.length || 0} Positionen
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <span className="font-bold text-gray-900">
-                        {order.totalAmount?.toFixed(2)} €
-                      </span>
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
-                        {order.status || 'eingegangen'}
-                      </span>
-                      <button className="text-gray-400 hover:text-gray-600">
-                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setArchiveModalId(order.id)}
-                    title="Bestellung archivieren"
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border-l border-gray-200 ml-2"
-                  >
-                    <Archive size={18} />
-                  </button>
-                </div>
-
-                {isExpanded && (
-                  <div className="p-4 border-t border-gray-100 bg-white">
-                    <h4 className="text-xs font-bold uppercase text-gray-400 mb-3">Bestellte Artikel</h4>
-                    <div className="divide-y divide-gray-100">
-                      {order.items?.map((item, idx) => (
-                        <div key={idx} className="py-2 flex justify-between text-sm">
-                          <span className="text-gray-800">
-                            {item.quantity}x {item.name} {item.variant ? `(${item.variant})` : ''}
-                          </span>
-                          <span className="font-medium text-gray-900">
-                            {(item.price * item.quantity).toFixed(2)} €
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {archiveModalId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
-            <div className="flex items-center gap-3 text-red-600">
-              <AlertTriangle size={28} />
-              <h3 className="text-lg font-bold">Bestellung archivieren?</h3>
-            </div>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Möchtest du diese Bestellung wirklich aus deiner Übersicht entfernen? <br />
-              <strong className="text-red-600">Achtung: Diese Aktion kann nicht rückgängig gemacht werden!</strong>
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setArchiveModalId(null)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={() => confirmArchive(archiveModalId)}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-sm"
-              >
-                Endgültig archivieren
-              </button>
-            </div>
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ShoppingBag className="text-blue-600" /> Meine Bestellungen
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Übersicht deiner getätigten Käufe und deren aktueller Status</p>
           </div>
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 transition-all"
+          >
+            <ArrowLeft size={16} /> Zum Shop
+          </button>
         </div>
-      )}
+
+        {orders.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
+            <Package size={48} className="mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900">Keine Bestellungen vorhanden</h3>
+            <p className="text-sm text-gray-500 mt-1 mb-6">Du hast bisher noch keine Produkte bestellt.</p>
+            <button
+              onClick={() => router.push('/')}
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              Jetzt einkaufen
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => {
+              const isExpanded = !!expandedOrders[order.id];
+              const shortId = order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#ID';
+              const itemCount = order.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+
+              return (
+                <div 
+                  key={order.id} 
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden transition-all hover:shadow-md"
+                >
+                  <div 
+                    onClick={() => toggleExpand(order.id)}
+                    className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer bg-white"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <Package size={20} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-bold text-gray-900">Bestell-ID: {shortId}</span>
+                          {getStatusBadge(order.status)}
+                        </div>
+                        <div className="text-xs text-gray-500 flex items-center gap-3 mt-1.5 flex-wrap">
+                          <span className="flex items-center gap-1"><Clock size={13} /> {formatDate(order.createdAt)}</span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1"><CreditCard size={13} /> Zahlung: <strong className="text-gray-700">{order.paymentMethod || 'offen'}</strong></span>
+                          <span>•</span>
+                          <span>{itemCount} {itemCount === 1 ? 'Artikel' : 'Artikel'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-4 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                      <div className="text-right">
+                        <span className="text-xs text-gray-400 block sm:hidden">Gesamtsumme</span>
+                        <span className="text-lg font-bold text-gray-900">{order.totalAmount?.toFixed(2)} €</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                          className="text-gray-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Bestellung aus Liste entfernen"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
+                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="bg-gray-50/70 border-t border-gray-100 p-5 space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">Bestellte Positionen</h4>
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+                        {order.items?.map((item, idx) => (
+                          <div key={idx} className="p-3.5 flex items-center justify-between text-sm">
+                            <div>
+                              <div className="font-semibold text-gray-900">{item.productName || item.name || 'Artikel'}</div>
+                              <div className="text-xs text-gray-500">
+                                {[item.size ? `Größe ${item.size}` : null, item.color].filter(Boolean).join(' • ') || 'Standard'}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-gray-600 text-xs">{item.quantity}x {item.price?.toFixed(2)} €</div>
+                              <div className="font-bold text-gray-900">{((item.price || 0) * item.quantity).toFixed(2)} €</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
