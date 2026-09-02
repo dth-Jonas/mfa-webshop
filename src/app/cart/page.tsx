@@ -92,6 +92,7 @@ export default function CartPage() {
       await addDoc(collection(db, 'orders'), {
         userId: user.uid,
         email: user.email?.toLowerCase(),
+        userName: customerName || user.displayName || user.email || 'Unbenannt',
         customerName: customerName || user.displayName || 'Unbenannt',
         windowId: activeWindow.id,
         windowTitle: activeWindow.title || 'Bestellfenster',
