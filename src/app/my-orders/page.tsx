@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '../../lib/auth';
 import { ChevronDown, ChevronUp, Archive, AlertTriangle } from 'lucide-react';
 
 interface OrderItem {
@@ -48,7 +48,7 @@ const parseDateMs = (dateVal: any): number => {
 };
 
 export default function MyOrdersPage() {
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -67,11 +67,11 @@ export default function MyOrdersPage() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!user) return;
 
     const q = query(
       collection(db, 'orders'),
-      where('userId', '==', currentUser.uid)
+      where('userId', '==', user.uid)
     );
 
     const unsubOrders = onSnapshot(q, (snapshot) => {
@@ -87,7 +87,7 @@ export default function MyOrdersPage() {
     });
 
     return () => unsubOrders();
-  }, [currentUser]);
+  }, [user]);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
