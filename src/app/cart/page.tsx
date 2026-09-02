@@ -90,6 +90,7 @@ export default function CartPage() {
     setSubmitting(true);
     try {
       await addDoc(collection(db, 'orders'), {
+        userEmail: user?.email || '',
         userId: user.uid,
         email: user.email?.toLowerCase(),
         userName: customerName || user.displayName || user.email || 'Unbenannt',
