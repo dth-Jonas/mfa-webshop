@@ -30,10 +30,37 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  
+  // Alle Bestellungen zurücksetzen / löschen
+  const handleAdminResetOrders = async () => {
+    if (!window.confirm("ACHTUNG: Möchtest du wirklich alle Bestellungen unwiderruflich aus der Datenbank löschen?")) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'orders', document.id));
+      });
+      await batch.commit();
+      localStorage.removeItem('user_orders');
+      alert("Alle Bestellungen wurden erfolgreich aus der Datenbank gelöscht.");
+      window.location.reload();
+    } catch (e) {
+      console.error("Fehler beim Zurücksetzen der Bestellungen:", e);
+      alert("Fehler beim Löschen der Bestellungen.");
+    }
+  };
+
   return (
     <div className="space-y-6 font-sans">
       <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
         <h1 className="text-2xl font-black text-gray-900">Admin-Cockpit</h1>
+          
+            <button
+              onClick={handleAdminResetOrders}
+              className="mt-2 sm:mt-0 text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3.5 py-2 rounded-xl hover:bg-red-100 transition-colors shadow-sm"
+            >
+              Datenbank leeren (Reset)
+            </button>
         <p className="text-xs font-semibold text-gray-500 mt-1">
           Verwalte hier Produkte, Zeitfenster und Bestellungen für deinen Shop.
         </p>
