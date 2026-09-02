@@ -148,7 +148,7 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        Bestell-ID: {order.id} | Zahlungsart: {order.paymentMethod || 'Ausstehend'} • {order.items?.length || 0} Positionen
+                        Bestell-ID: {order.id} | Status: {order.status || 'Eingegangen'} | Zahlung: {order.paymentMethod || 'offen'} • {order.items?.length || 0} Positionen
                       </div>
                     </div>
 

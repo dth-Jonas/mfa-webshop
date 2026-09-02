@@ -106,6 +106,8 @@ export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange 
                       onChange={(e) => onStatusChange && onStatusChange(order.id, 'status', e.target.value)}
                       className="bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-200 focus:outline-none"
                     >
+                      <option value="Eingegangen">Eingegangen</option>
+                      <option value="Eingegangen">Eingegangen</option>
                       <option value="Offen">Offen</option>
                       <option value="In Bearbeitung">In Bearbeitung</option>
                       <option value="Abgeschlossen">Abgeschlossen</option>
@@ -114,13 +116,14 @@ export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange 
                   </td>
                   <td className="p-4" onClick={(e) => e.stopPropagation()}>
                     <select
-                      value={order.paymentMethod || 'PayPal'}
+                      value={order.paymentMethod || 'offen'}
                       onChange={(e) => onStatusChange && onStatusChange(order.id, 'paymentMethod', e.target.value)}
                       className="bg-gray-50 text-gray-800 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
+                      <option value="offen">offen</option>
+                      <option value="BAR">BAR</option>
                       <option value="PayPal">PayPal</option>
                       <option value="Überweisung">Überweisung</option>
-                      <option value="BAR">BAR</option>
                     </select>
                   </td>
                   <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
