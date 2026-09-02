@@ -7,6 +7,27 @@ import { db, auth } from '../../lib/firebase';
 import { Order } from '../../lib/types';
 import Link from 'next/link';
 
+
+const parseDate = (dateVal: any): Date | null => {
+  if (!dateVal) return null;
+  if (typeof dateVal.toDate === 'function') return dateVal.toDate();
+  if (dateVal.seconds) return new Date(dateVal.seconds * 1000);
+  const parsed = new Date(dateVal);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDate = (dateVal: any): string => {
+  const date = parseDate(dateVal);
+  if (!date) return 'Unbekannt';
+  return date.toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }) + ' Uhr';
+};
+
 export default function MyOrdersPage() {
   const [user, setUser] = useState<User | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -28,7 +49,7 @@ export default function MyOrdersPage() {
             ...doc.data(),
           })) as Order[];
 
-          items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          items.sort((a, b) => ((parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)));
 
           setOrders(items);
           setLoading(false);
@@ -119,7 +140,7 @@ export default function MyOrdersPage() {
                       Bestell-ID: {order.id}
                     </span>
                     <span className="text-xs font-bold text-gray-500">
-                      Bestellt am: {order.createdAt ? new Date(order.createdAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                      Bestellt am: {formatDate(order.createdAt)}
                     </span>
                   </div>
 
