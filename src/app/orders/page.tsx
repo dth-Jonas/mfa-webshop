@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface OrderItem {
   productName?: string;
@@ -26,43 +28,60 @@ export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Lade direkt aus dem localStorage, damit im Checkout getätigte Bestellungen sofort angezeigt werden
-    const loadOrders = () => {
-      const savedOrders = localStorage.getItem('user_orders');
-      if (savedOrders) {
-        try {
-          const parsed = JSON.parse(savedOrders);
-          // Sortiere nach Datum absteigend (neueste zuerst)
-          parsed.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          setOrders(parsed);
-        } catch (e) {
-          console.error("Fehler beim Parsen der Bestellungen:", e);
-        }
-      }
-    };
+    async function fetchOrders() {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'orders'));
+        const fetchedOrders: Order[] = [];
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          fetchedOrders.push({
+            id: docSnap.id,
+            createdAt: data.createdAt,
+            totalAmount: data.totalAmount || 0,
+            status: data.status,
+            paymentMethod: data.paymentMethod,
+            items: data.items || []
+          });
+        });
 
-    loadOrders();
-    // Event Listener für plötzliche Änderungen
-    window.addEventListener('storage', loadOrders);
-    return () => window.removeEventListener('storage', loadOrders);
+        // Sortiere nach Datum absteigend (neueste zuerst)
+        fetchedOrders.sort((a, b) => {
+          const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+          const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        });
+
+        setOrders(fetchedOrders);
+      } catch (e) {
+        console.error("Fehler beim Laden der Bestellungen aus Firebase:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchOrders();
   }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const deleteOrder = (id: string) => {
-    const updated = orders.filter(o => o.id !== id);
-    setOrders(updated);
-    localStorage.setItem('user_orders', JSON.stringify(updated));
+  const deleteOrder = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'orders', id));
+      setOrders(prev => prev.filter(o => o.id !== id));
+    } catch (e) {
+      console.error("Fehler beim Löschen:", e);
+    }
   };
 
   const formatDate = (dateVal: any) => {
     if (!dateVal) return 'Gerade eben';
     try {
-      const date = new Date(dateVal);
+      const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
       if (isNaN(date.getTime())) return 'Gerade eben';
       return new Intl.DateTimeFormat('de-DE', {
         day: '2-digit',
@@ -90,6 +109,14 @@ export default function OrdersPage() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-sm text-gray-500 font-medium">Lade Bestellungen...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-4 px-3 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto space-y-4">
@@ -116,7 +143,7 @@ export default function OrdersPage() {
           <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
             <Package size={40} className="mx-auto text-gray-300 mb-3" />
             <h3 className="text-base font-medium text-gray-900">Keine Bestellungen vorhanden</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">Du hast in dieser Sitzung noch keine Produkte bestellt.</p>
+            <p className="text-xs text-gray-500 mt-1 mb-5">Es wurden noch keine Bestellungen in der Datenbank gefunden.</p>
             <button
               onClick={() => router.push('/')}
               className="bg-blue-600 text-white w-full py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
