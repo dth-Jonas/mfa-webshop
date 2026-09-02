@@ -3,8 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../lib/firebase'; // Pfad zu deiner Firebase-Konfiguration
 
 interface OrderItem {
   productName?: string;
@@ -21,7 +19,6 @@ interface Order {
   totalAmount: number;
   status?: string;
   paymentMethod?: string;
-  userEmail?: string;
   items: OrderItem[];
 }
 
@@ -29,75 +26,44 @@ export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchOrders() {
-      try {
-        // Beispiel: Lade alle Bestellungen (oder filtere nach eingeloggtem Nutzer, falls E-Mail im localStorage gespeichert ist)
-        const userEmail = localStorage.getItem('user_email');
-        const q = query(collection(db, 'orders'));
-        const querySnapshot = await getDocs(q);
-        
-        const fetchedOrders: Order[] = [];
-        querySnapshot.forEach((docSnapshot) => {
-          const data = docSnapshot.data();
-          // Falls gewünscht, hier nach userEmail filtern oder alle anzeigen, die zugeordnet sind
-          if (!userEmail || data.userEmail === userEmail || !data.userEmail) {
-            fetchedOrders.push({
-              id: docSnapshot.id,
-              createdAt: data.createdAt,
-              totalAmount: data.totalAmount || 0,
-              status: data.status,
-              paymentMethod: data.paymentMethod,
-              userEmail: data.userEmail,
-              items: data.items || []
-            });
-          }
-        });
-
-        // Falls keine in Firestore, Fallback auf localStorage
-        if (fetchedOrders.length === 0) {
-          const savedOrders = localStorage.getItem('user_orders');
-          if (savedOrders) {
-            setOrders(JSON.parse(savedOrders));
-          } else {
-            setOrders([]);
-          }
-        } else {
-          setOrders(fetchedOrders);
+    // Lade direkt aus dem localStorage, damit im Checkout getätigte Bestellungen sofort angezeigt werden
+    const loadOrders = () => {
+      const savedOrders = localStorage.getItem('user_orders');
+      if (savedOrders) {
+        try {
+          const parsed = JSON.parse(savedOrders);
+          // Sortiere nach Datum absteigend (neueste zuerst)
+          parsed.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          setOrders(parsed);
+        } catch (e) {
+          console.error("Fehler beim Parsen der Bestellungen:", e);
         }
-      } catch (e) {
-        console.error("Fehler beim Laden aus Firebase, nutze Fallback:", e);
-        const savedOrders = localStorage.getItem('user_orders');
-        if (savedOrders) setOrders(JSON.parse(savedOrders));
-      } finally {
-        setLoading(false);
       }
-    }
+    };
 
-    fetchOrders();
+    loadOrders();
+    // Event Listener für plötzliche Änderungen
+    window.addEventListener('storage', loadOrders);
+    return () => window.removeEventListener('storage', loadOrders);
   }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const deleteOrder = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'orders', id));
-    } catch (e) {
-      console.error("Fehler beim Löschen in Firestore:", e);
-    }
+  const deleteOrder = (id: string) => {
     const updated = orders.filter(o => o.id !== id);
     setOrders(updated);
     localStorage.setItem('user_orders', JSON.stringify(updated));
   };
 
   const formatDate = (dateVal: any) => {
-    if (!dateVal) return 'Kürzlich';
+    if (!dateVal) return 'Gerade eben';
     try {
-      const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+      const date = new Date(dateVal);
+      if (isNaN(date.getTime())) return 'Gerade eben';
       return new Intl.DateTimeFormat('de-DE', {
         day: '2-digit',
         month: '2-digit',
@@ -106,7 +72,7 @@ export default function OrdersPage() {
         minute: '2-digit',
       }).format(date);
     } catch {
-      return 'Kürzlich';
+      return 'Gerade eben';
     }
   };
 
@@ -124,26 +90,18 @@ export default function OrdersPage() {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-sm text-gray-500 font-medium">Lade Bestellungen...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-4 px-3 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto space-y-4">
-        {/* Header für Mobile optimiert */}
+        {/* Header */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <ShoppingBag size={18} />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">Bestellungen</h1>
-              <p className="text-xs text-gray-500">Übersicht & Status</p>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Meine Bestellungen</h1>
+              <p className="text-xs text-gray-500">Übersicht & aktueller Status</p>
             </div>
           </div>
           <button
@@ -157,8 +115,8 @@ export default function OrdersPage() {
         {orders.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
             <Package size={40} className="mx-auto text-gray-300 mb-3" />
-            <h3 className="text-base font-medium text-gray-900">Keine Bestellungen</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">Du hast bisher noch nichts gekauft.</p>
+            <h3 className="text-base font-medium text-gray-900">Keine Bestellungen vorhanden</h3>
+            <p className="text-xs text-gray-500 mt-1 mb-5">Du hast in dieser Sitzung noch keine Produkte bestellt.</p>
             <button
               onClick={() => router.push('/')}
               className="bg-blue-600 text-white w-full py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
@@ -170,7 +128,8 @@ export default function OrdersPage() {
           <div className="space-y-3">
             {orders.map((order) => {
               const isExpanded = !!expandedOrders[order.id];
-              const shortId = order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#ID';
+              // Kurze und prägnante ID (letzte 6 Zeichen großgeschrieben)
+              const shortId = order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#BESTELLUNG';
               const itemCount = order.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
               return (
@@ -193,7 +152,7 @@ export default function OrdersPage() {
                       </span>
                     </div>
 
-                    {/* Zeile 2: Meta-Infos (Datum, Zahlung, Artikelanzahl) */}
+                    {/* Zeile 2: Meta-Infos */}
                     <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-gray-100">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(order.createdAt)}</span>
@@ -201,13 +160,13 @@ export default function OrdersPage() {
                         <span>Zahlung: <strong className="text-gray-700">{order.paymentMethod || 'offen'}</strong></span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600 font-medium">
-                        <span>{itemCount} {itemCount === 1 ? 'Art.' : 'Art.'}</span>
+                        <span>{itemCount} {itemCount === 1 ? 'Artikel' : 'Artikel'}</span>
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </div>
                     </div>
                   </div>
 
-                  {/* Aufklappbare Details für Mobile */}
+                  {/* Aufklappbare Details */}
                   {isExpanded && (
                     <div className="bg-gray-50/80 border-t border-gray-100 p-3.5 space-y-3">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 px-1">
@@ -230,13 +189,13 @@ export default function OrdersPage() {
                         ))}
                       </div>
 
-                      {/* Mobiler Löschen-Button */}
+                      {/* Löschen-Button */}
                       <div className="pt-1 flex justify-end">
                         <button
                           onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
                           className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors font-medium"
                         >
-                          <Trash2 size={14} /> Bestellung aus Historie entfernen
+                          <Trash2 size={14} /> Aus Historie entfernen
                         </button>
                       </div>
                     </div>
