@@ -46,7 +46,7 @@ export default function HomePage() {
         if (!w.startDate || !w.endDate) return false;
         const start = new Date(w.startDate);
         const end = new Date(w.endDate);
-        return now >= start && now <= end;
+        return w.isActive && now >= start && now <= end;
       });
       setActiveWindow(openWindow || null);
     });
