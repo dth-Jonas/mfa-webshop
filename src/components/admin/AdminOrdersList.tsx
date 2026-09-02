@@ -107,7 +107,6 @@ export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange 
                       className="bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-200 focus:outline-none"
                     >
                       <option value="Eingegangen">Eingegangen</option>
-                      <option value="Eingegangen">Eingegangen</option>
                       <option value="Offen">Offen</option>
                       <option value="In Bearbeitung">In Bearbeitung</option>
                       <option value="Abgeschlossen">Abgeschlossen</option>
