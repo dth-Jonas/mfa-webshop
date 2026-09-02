@@ -19,7 +19,8 @@ export default function MyOrdersPage() {
       if (currentUser) {
         const q = query(
           collection(db, 'orders'),
-          where('userId', '==', currentUser.uid)
+          where('userId', '==', currentUser.uid),
+          orderBy('createdAt', 'desc')
         );
 
         const unsubOrders = onSnapshot(q, (snapshot) => {

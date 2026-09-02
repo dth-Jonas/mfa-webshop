@@ -27,7 +27,8 @@ export default function MyOrdersPage() {
     try {
       const q = query(
         collection(db, 'orders'),
-        where('userId', '==', userId)
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
       const fetchedOrders = querySnapshot.docs.map(docSnap => ({
