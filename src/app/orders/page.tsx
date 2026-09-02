@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; // Pfad zu deiner Firebase-Konfiguration
 
 interface OrderItem {
   productName?: string;
@@ -19,6 +21,7 @@ interface Order {
   totalAmount: number;
   status?: string;
   paymentMethod?: string;
+  userEmail?: string;
   items: OrderItem[];
 }
 
@@ -26,23 +29,66 @@ export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedOrders = localStorage.getItem('user_orders');
-    if (savedOrders) {
+    async function fetchOrders() {
       try {
-        setOrders(JSON.parse(savedOrders));
+        // Beispiel: Lade alle Bestellungen (oder filtere nach eingeloggtem Nutzer, falls E-Mail im localStorage gespeichert ist)
+        const userEmail = localStorage.getItem('user_email');
+        const q = query(collection(db, 'orders'));
+        const querySnapshot = await getDocs(q);
+        
+        const fetchedOrders: Order[] = [];
+        querySnapshot.forEach((docSnapshot) => {
+          const data = docSnapshot.data();
+          // Falls gewünscht, hier nach userEmail filtern oder alle anzeigen, die zugeordnet sind
+          if (!userEmail || data.userEmail === userEmail || !data.userEmail) {
+            fetchedOrders.push({
+              id: docSnapshot.id,
+              createdAt: data.createdAt,
+              totalAmount: data.totalAmount || 0,
+              status: data.status,
+              paymentMethod: data.paymentMethod,
+              userEmail: data.userEmail,
+              items: data.items || []
+            });
+          }
+        });
+
+        // Falls keine in Firestore, Fallback auf localStorage
+        if (fetchedOrders.length === 0) {
+          const savedOrders = localStorage.getItem('user_orders');
+          if (savedOrders) {
+            setOrders(JSON.parse(savedOrders));
+          } else {
+            setOrders([]);
+          }
+        } else {
+          setOrders(fetchedOrders);
+        }
       } catch (e) {
-        console.error("Fehler beim Laden der Bestellungen", e);
+        console.error("Fehler beim Laden aus Firebase, nutze Fallback:", e);
+        const savedOrders = localStorage.getItem('user_orders');
+        if (savedOrders) setOrders(JSON.parse(savedOrders));
+      } finally {
+        setLoading(false);
       }
     }
+
+    fetchOrders();
   }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const deleteOrder = (id: string) => {
+  const deleteOrder = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'orders', id));
+    } catch (e) {
+      console.error("Fehler beim Löschen in Firestore:", e);
+    }
     const updated = orders.filter(o => o.id !== id);
     setOrders(updated);
     localStorage.setItem('user_orders', JSON.stringify(updated));
@@ -77,6 +123,14 @@ export default function OrdersPage() {
       </span>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-sm text-gray-500 font-medium">Lade Bestellungen...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 px-3 sm:px-6 lg:px-8">
