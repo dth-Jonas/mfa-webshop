@@ -1,13 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot , orderBy } from 'firebase/firestore';
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { db, auth } from '../../lib/firebase';
-import { Order } from '../../lib/types';
-import Link from 'next/link';
+import { db } from '../../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useAuth } from '@/context/AuthContext';
+import { ChevronDown, ChevronUp, Archive, AlertTriangle } from 'lucide-react';
 
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
 
+interface Order {
+  id: string;
+  createdAt: any;
+  totalAmount: number;
+  status: string;
+  items: OrderItem[];
+}
 
 const formatDate = (dateVal: any) => {
   if (!dateVal) return 'Unbekanntes Datum';
@@ -37,193 +48,165 @@ const parseDateMs = (dateVal: any): number => {
 };
 
 export default function MyOrdersPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { currentUser } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [archivedOrderIds, setArchivedOrderIds] = useState<string[]>([]);
+  const [archiveModalId, setArchiveModalId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-
-      if (currentUser) {
-        const q = query(
-          collection(db, 'orders'),
-          where('userId', '==', currentUser.uid)
-        );
-
-        const unsubOrders = onSnapshot(q, (snapshot) => {
-          const items = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Order[];
-
-          items.sort((a, b) => parseDateMs(b.createdAt) - parseDateMs(a.createdAt));
-
-          setOrders(items);
-          setLoading(false);
-        });
-
-        return () => unsubOrders();
-      } else {
-        setOrders([]);
-        setLoading(false);
+    const savedArchived = localStorage.getItem('archived_orders');
+    if (savedArchived) {
+      try {
+        setArchivedOrderIds(JSON.parse(savedArchived));
+      } catch (e) {
+        console.error(e);
       }
-    });
-
-    return () => unsubAuth();
+    }
   }, []);
 
-  const handleGoogleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error(err);
-      alert('Anmeldung fehlgeschlagen.');
-    }
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', currentUser.uid)
+    );
+
+    const unsubOrders = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Order[];
+
+      items.sort((a, b) => parseDateMs(b.createdAt) - parseDateMs(a.createdAt));
+
+      setOrders(items);
+      setLoading(false);
+    });
+
+    return () => unsubOrders();
+  }, [currentUser]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const confirmArchive = (id: string) => {
+    const updated = [...archivedOrderIds, id];
+    setArchivedOrderIds(updated);
+    localStorage.setItem('archived_orders', JSON.stringify(updated));
+    setArchiveModalId(null);
+  };
+
+  const visibleOrders = orders.filter((o) => !archivedOrderIds.includes(o.id));
+
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center font-sans">
-        <p className="text-gray-400 text-sm font-bold">Lade Bestellungen...</p>
-      </div>
-    );
+    return <div className="p-8 text-center text-gray-500">Bestellungen werden geladen...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-900 font-sans pb-16">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link href="/shop" className="text-xs font-bold text-gray-500 hover:text-gray-900">
-              ← Zurück zum Shop
-            </Link>
-            <h1 className="text-xl font-black text-gray-900">📦 Meine Bestellungen</h1>
-          </div>
-          {user && (
-            <div className="text-right">
-              <p className="text-xs font-bold text-gray-900">{user.displayName}</p>
-              <p className="text-[10px] text-gray-500">{user.email}</p>
-            </div>
-          )}
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+      <h1 className="text-2xl font-bold text-gray-900">Meine Bestellungen</h1>
+
+      {visibleOrders.length === 0 ? (
+        <div className="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500">
+          Keine aktiven Bestellungen vorhanden.
         </div>
-      </header>
+      ) : (
+        <div className="space-y-4">
+          {visibleOrders.map((order) => {
+            const isExpanded = !!expandedOrders[order.id];
 
-      <main className="max-w-4xl mx-auto px-4 pt-8 space-y-6">
-        {!user ? (
-          <div className="bg-white p-8 rounded-3xl border border-gray-200 text-center space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Bitte melde dich an, um deine bisherigen Bestellungen zu sehen.
-            </p>
-            <button
-              onClick={handleGoogleLogin}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all"
-            >
-              Mit Google anmelden
-            </button>
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="bg-white p-8 rounded-3xl border border-gray-200 text-center space-y-3">
-            <p className="text-2xl">🛍️</p>
-            <h2 className="font-bold text-gray-900 text-base">Keine Bestellungen gefunden</h2>
-            <p className="text-xs text-gray-500">Du hast bisher noch keine Produkte bestellt.</p>
-            <Link
-              href="/shop"
-              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all"
-            >
-              Jetzt im Shop stöbern
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4"
-              >
-                <div className="flex flex-wrap justify-between items-start gap-2 border-b border-gray-100 pb-3">
-                  <div>
-                    <span className="text-[10px] uppercase font-extrabold text-gray-400 block">
-                      Bestell-ID: {order.id}
-                    </span>
-                    <span className="text-xs font-bold text-gray-500">
-                      Bestellt am: {formatDate(order.createdAt)}
-                    </span>
+            return (
+              <div key={order.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-4 flex items-center justify-between bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                  <div 
+                    className="flex-1 cursor-pointer flex items-center justify-between pr-4"
+                    onClick={() => toggleExpand(order.id)}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">
+                          Bestellung vom {formatDate(order.createdAt)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        ID: {order.id} • {order.items?.length || 0} Positionen
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-gray-900">
+                        {order.totalAmount?.toFixed(2)} €
+                      </span>
+                      <button className="text-gray-400 hover:text-gray-600">
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                        order.status === 'versendet'
-                          ? 'bg-blue-100 text-blue-800'
-                          : order.status === 'in bearbeitung'
-                          ? 'bg-amber-100 text-amber-800'
-                          : order.status === 'storniert'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      Status: {order.status || 'offen'}
-                    </span>
-
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                        order.paid ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-700'
-                      }`}
-                    >
-                      {order.paid ? 'Bezahlt' : 'Offen'}
-                    </span>
-                  </div>
+                  <button
+                    onClick={() => setArchiveModalId(order.id)}
+                    title="Bestellung archivieren"
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border-l border-gray-200 ml-2"
+                  >
+                    <Archive size={18} />
+                  </button>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-gray-500 uppercase">Bestellte Artikel</p>
-                  <ul className="divide-y divide-gray-50 text-xs">
-                    {(order.items || []).map((item: any, idx: number) => {
-                      const itemPrice = Number(item.unitPrice ?? item.price ?? 0);
-                      const qty = Number(item.quantity || 1);
-
-                      return (
-                        <li key={idx} className="py-2 flex justify-between items-center">
-                          <div>
-                            <span className="font-bold text-gray-900">{item.productName || item.name || 'Artikel'}</span>
-                            <span className="text-gray-500 ml-2">
-                              ({qty}x {itemPrice.toFixed(2)} €)
-                            </span>
-                            {(item.size || item.color) && (
-                              <p className="text-[10px] text-gray-400">
-                                {item.size && `Größe: ${item.size} `}
-                                {item.color && `Farbe: ${item.color}`}
-                              </p>
-                            )}
-                          </div>
-                          <span className="font-bold text-gray-900">
-                            {(itemPrice * qty).toFixed(2)} €
+                {isExpanded && (
+                  <div className="p-4 border-t border-gray-100 bg-white">
+                    <h4 className="text-xs font-bold uppercase text-gray-400 mb-3">Bestellte Artikel</h4>
+                    <div className="divide-y divide-gray-100">
+                      {order.items?.map((item, idx) => (
+                        <div key={idx} className="py-2 flex justify-between text-sm">
+                          <span className="text-gray-800">
+                            {item.quantity}x {item.name}
                           </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-
-                {order.note && (
-                  <div className="bg-gray-50 p-3 rounded-2xl text-xs text-gray-600">
-                    <strong>Bemerkung:</strong> {order.note}
+                          <span className="font-medium text-gray-900">
+                            {(item.price * item.quantity).toFixed(2)} €
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                  <span className="text-xs font-bold text-gray-500">Gesamtsumme</span>
-                  <span className="text-base font-black text-blue-600">
-                    {Number(order.totalPrice ?? order.totalAmount ?? 0).toFixed(2)} €
-                  </span>
-                </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+      )}
+
+      {archiveModalId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <AlertTriangle size={28} />
+              <h3 className="text-lg font-bold">Bestellung archivieren?</h3>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Möchtest du diese Bestellung wirklich aus deiner Übersicht entfernen? <br />
+              <strong className="text-red-600">Achtung: Diese Aktion kann nicht rückgängig gemacht werden!</strong>
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setArchiveModalId(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => confirmArchive(archiveModalId)}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-sm"
+              >
+                Endgültig archivieren
+              </button>
+            </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }
