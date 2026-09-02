@@ -28,6 +28,34 @@ const formatDate = (dateVal: any): string => {
   }) + ' Uhr';
 };
 
+
+const formatDate = (dateVal: any) => {
+  if (!dateVal) return 'Unbekanntes Datum';
+  try {
+    const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+    if (isNaN(date.getTime())) return 'Unbekanntes Datum';
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return 'Unbekanntes Datum';
+  }
+};
+
+const parseDateMs = (dateVal: any): number => {
+  if (!dateVal) return 0;
+  try {
+    const date = dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  } catch {
+    return 0;
+  }
+};
+
 export default function MyOrdersPage() {
   const [user, setUser] = useState<User | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -49,7 +77,7 @@ export default function MyOrdersPage() {
             ...doc.data(),
           })) as Order[];
 
-          items.sort((a, b) => ((parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)));
+          items.sort((a, b) => parseDateMs(b.createdAt) - parseDateMs(a.createdAt));
 
           setOrders(items);
           setLoading(false);
