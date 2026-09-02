@@ -53,7 +53,10 @@ export default function OrdersPage() {
           return timeB - timeA;
         });
 
-        setOrders(fetchedOrders);
+                // Filtere Bestellungen heraus, die der Kunde lokal ausgeblendet hat
+        const savedHidden = JSON.parse(localStorage.getItem('hidden_orders') || '[]');
+        const visibleOrders = fetchedOrders.filter(o => !savedHidden.includes(o.id));
+        setOrders(visibleOrders);
       } catch (e) {
         console.error("Fehler beim Laden der Bestellungen aus Firebase:", e);
       } finally {
@@ -68,13 +71,24 @@ export default function OrdersPage() {
     setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const deleteOrder = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'orders', id));
-      setOrders(prev => prev.filter(o => o.id !== id));
-    } catch (e) {
-      console.error("Fehler beim Löschen:", e);
+  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([]);
+
+  // Lade ausgeblendete Bestellungen beim Start aus dem localStorage
+  useEffect(() => {
+    const savedHidden = localStorage.getItem('hidden_orders');
+    if (savedHidden) {
+      try {
+        setHiddenOrderIds(JSON.parse(savedHidden));
+      } catch (e) {
+        console.error("Fehler beim Laden der versteckten Bestellungen:", e);
+      }
     }
+  }, []);
+
+  const deleteOrder = (id: string) => {
+    const updatedHidden = [...hiddenOrderIds, id];
+    setHiddenOrderIds(updatedHidden);
+    localStorage.setItem('hidden_orders', JSON.stringify(updatedHidden));
   };
 
   const formatDate = (dateVal: any) => {
