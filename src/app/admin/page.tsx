@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, updateDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, deleteDoc, addDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { ChevronDown, ChevronUp, Package, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, RefreshCw, Plus, Trash2, Clock } from 'lucide-react';
 
 interface OrderItem {
   productName?: string;
@@ -25,23 +25,46 @@ interface Order {
   items: OrderItem[];
 }
 
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  image?: string;
+}
+
 export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'settings'>('orders');
+  
+  // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
-  const fetchOrders = async () => {
+  // Products State
+  const [products, setProducts] = useState<Product[]>([]);
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductPrice, setNewProductPrice] = useState('');
+  const [newProductDesc, setNewProductDesc] = useState('');
+
+  // Settings / Time Window State
+  const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('20:00');
+
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const querySnapshot = await getDocs(collection(db, 'orders'));
-      const fetched: Order[] = [];
-      querySnapshot.forEach((docSnap) => {
+      // 1. Fetch Orders
+      const orderSnap = await getDocs(collection(db, 'orders'));
+      const fetchedOrders: Order[] = [];
+      orderSnap.forEach((docSnap) => {
         const data = docSnap.data();
-        fetched.push({
+        fetchedOrders.push({
           id: docSnap.id,
           createdAt: data.createdAt,
-          customerName: data.customerName || data.name || 'Jonas S',
-          customerEmail: data.customerEmail || data.email || 'kunder@mail.de',
+          customerName: data.customerName || data.name || 'Kunde',
+          customerEmail: data.customerEmail || data.email || 'kunden@mail.de',
           totalAmount: data.totalAmount || 0,
           status: data.status || 'Eingegangen',
           paymentMethod: data.paymentMethod || 'offen',
@@ -49,22 +72,49 @@ export default function AdminPage() {
         });
       });
 
-      fetched.sort((a, b) => {
+      fetchedOrders.sort((a, b) => {
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
         const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
         return timeB - timeA;
       });
+      setOrders(fetchedOrders);
 
-      setOrders(fetched);
+      // 2. Fetch Products
+      const prodSnap = await getDocs(collection(db, 'products'));
+      const fetchedProducts: Product[] = [];
+      prodSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        fetchedProducts.push({
+          id: docSnap.id,
+          name: data.name || '',
+          price: data.price || 0,
+          description: data.description || '',
+          image: data.image || '',
+        });
+      });
+      setProducts(fetchedProducts);
+
     } catch (e) {
-      console.error("Fehler beim Laden der Admin-Bestellungen:", e);
+      console.error("Fehler beim Laden der Admin-Daten:", e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchData();
+    // Lade lokale Zeitfenster-Einstellungen
+    const savedWindow = localStorage.getItem('order_timewindow');
+    if (savedWindow) {
+      try {
+        const parsed = JSON.parse(savedWindow);
+        setTimeWindowEnabled(parsed.enabled || false);
+        setStartTime(parsed.start || '08:00');
+        setEndTime(parsed.end || '20:00');
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }, []);
 
   const toggleExpand = (id: string) => {
@@ -76,7 +126,7 @@ export default function AdminPage() {
       await updateDoc(doc(db, 'orders', id), { status: newStatus });
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
     } catch (e) {
-      console.error("Fehler beim Aktualisieren des Status:", e);
+      console.error("Fehler beim Status:", e);
     }
   };
 
@@ -85,7 +135,7 @@ export default function AdminPage() {
       await updateDoc(doc(db, 'orders', id), { paymentMethod: newPayment });
       setOrders(prev => prev.map(o => o.id === id ? { ...o, paymentMethod: newPayment } : o));
     } catch (e) {
-      console.error("Fehler beim Aktualisieren der Bezahlung:", e);
+      console.error("Fehler bei Bezahlung:", e);
     }
   };
 
@@ -101,11 +151,49 @@ export default function AdminPage() {
       localStorage.removeItem('user_orders');
       localStorage.removeItem('hidden_orders');
       alert("Alle Bestellungen wurden erfolgreich aus der Datenbank gelöscht.");
-      fetchOrders();
+      fetchData();
     } catch (e) {
       console.error("Fehler beim Zurücksetzen:", e);
-      alert("Fehler beim Löschen der Bestellungen.");
     }
+  };
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductName || !newProductPrice) return;
+    try {
+      await addDoc(collection(db, 'products'), {
+        name: newProductName,
+        price: parseFloat(newProductPrice),
+        description: newProductDesc,
+        createdAt: new Date()
+      });
+      setNewProductName('');
+      setNewProductPrice('');
+      setNewProductDesc('');
+      alert("Artikel erfolgreich hinzugefügt!");
+      fetchData();
+    } catch (e) {
+      console.error("Fehler beim Hinzufügen des Artikels:", e);
+      alert("Fehler beim Erstellen.");
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (!window.confirm("Artikel wirklich löschen?")) return;
+    try {
+      await deleteDoc(doc(db, 'products', id));
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } catch (e) {
+      console.error("Fehler beim Löschen des Artikels:", e);
+    }
+  };
+
+  const saveTimeWindow = (enabled: boolean, start: string, end: string) => {
+    setTimeWindowEnabled(enabled);
+    setStartTime(start);
+    setEndTime(end);
+    localStorage.setItem('order_timewindow', JSON.stringify({ enabled, start, end }));
+    alert("Bestellzeit-Fenster gespeichert!");
   };
 
   const formatDate = (dateVal: any) => {
@@ -137,136 +225,286 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Bestellverwaltung</h1>
-          <div className="flex items-center gap-3">
+        {/* Header & Tabs */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Admin-Dashboard</h1>
+            <p className="text-xs text-gray-500">Shop-Verwaltung & Bestellungen</p>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={fetchOrders}
-              className="p-2 text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
-              title="Aktualisieren"
+              onClick={() => setActiveTab('orders')}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${activeTab === 'orders' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
-              <RefreshCw size={16} />
+              Bestellverwaltung ({orders.length})
             </button>
             <button
-              onClick={handleAdminResetOrders}
-              className="text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3.5 py-2 rounded-xl hover:bg-red-100 transition-colors shadow-sm"
+              onClick={() => setActiveTab('products')}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${activeTab === 'products' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
-              Datenbank leeren (Reset)
+              Artikel verwalten ({products.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Bestellzeit-Fenster
             </button>
           </div>
         </div>
 
-        {/* Bestellungen Liste */}
-        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
-          {/* Spaltenüberschriften */}
-          <div className="grid grid-cols-12 gap-2 p-4 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50 border-b border-gray-100">
-            <div className="col-span-3">Kunde / Datum</div>
-            <div className="col-span-3">Bestellte Artikel</div>
-            <div className="col-span-2 text-right">Gesamtsumme</div>
-            <div className="col-span-2 text-center">Bestellstatus</div>
-            <div className="col-span-2 text-center">Bezahlung</div>
-          </div>
-
-          {orders.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              <Package size={36} className="mx-auto text-gray-300 mb-2" />
-              Keine Bestellungen in der Datenbank vorhanden.
+        {/* TAB 1: BESTELLUNGEN */}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={fetchData}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+              >
+                <RefreshCw size={14} /> Aktualisieren
+              </button>
+              <button
+                onClick={handleAdminResetOrders}
+                className="text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3.5 py-2 rounded-xl hover:bg-red-100 transition-colors shadow-sm"
+              >
+                Datenbank leeren (Reset)
+              </button>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {orders.map((order) => {
-                const isExpanded = !!expandedOrders[order.id];
-                const totalItems = order.items?.reduce((acc, i) => acc + i.quantity, 0) || 0;
-                const positionCount = order.items?.length || 0;
 
-                return (
-                  <div key={order.id} className="transition-colors hover:bg-gray-50/50">
-                    <div className="grid grid-cols-12 gap-2 p-4 items-center text-sm">
-                      {/* Kunde & Datum */}
-                      <div className="col-span-3 flex items-center gap-2 cursor-pointer" onClick={() => toggleExpand(order.id)}>
-                        {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-                        <div>
-                          <div className="font-bold text-gray-900">{order.customerName}</div>
-                          <div className="text-xs text-gray-400">{formatDate(order.createdAt)}</div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 p-4 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50 border-b border-gray-100">
+                <div className="col-span-3">Kunde / Datum</div>
+                <div className="col-span-3">Bestellte Artikel</div>
+                <div className="col-span-2 text-right">Gesamtsumme</div>
+                <div className="col-span-2 text-center">Bestellstatus</div>
+                <div className="col-span-2 text-center">Bezahlung</div>
+              </div>
+
+              {orders.length === 0 ? (
+                <div className="p-12 text-center text-gray-500">
+                  <Package size={36} className="mx-auto text-gray-300 mb-2" />
+                  Keine Bestellungen vorhanden.
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {orders.map((order) => {
+                    const isExpanded = !!expandedOrders[order.id];
+                    const totalItems = order.items?.reduce((acc, i) => acc + i.quantity, 0) || 0;
+                    const positionCount = order.items?.length || 0;
+
+                    return (
+                      <div key={order.id} className="transition-colors hover:bg-gray-50/50">
+                        <div className="grid grid-cols-12 gap-2 p-4 items-center text-sm">
+                          <div className="col-span-3 flex items-center gap-2 cursor-pointer" onClick={() => toggleExpand(order.id)}>
+                            {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                            <div>
+                              <div className="font-bold text-gray-900">{order.customerName}</div>
+                              <div className="text-xs text-gray-400">{formatDate(order.createdAt)}</div>
+                            </div>
+                          </div>
+
+                          <div className="col-span-3 text-gray-700 font-medium cursor-pointer" onClick={() => toggleExpand(order.id)}>
+                            {positionCount} {positionCount === 1 ? 'Position' : 'Positionen'} ({totalItems} {totalItems === 1 ? 'Artikel' : 'Artikel'})
+                          </div>
+
+                          <div className="col-span-2 text-right font-black text-gray-900">
+                            {order.totalAmount?.toFixed(2)} €
+                          </div>
+
+                          <div className="col-span-2 text-center">
+                            <select
+                              value={order.status}
+                              onChange={(e) => updateStatus(order.id, e.target.value)}
+                              className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 cursor-pointer focus:outline-none"
+                            >
+                              <option value="Eingegangen">Eingegangen</option>
+                              <option value="In Bearbeitung">In Bearbeitung</option>
+                              <option value="Abgeschlossen">Abgeschlossen</option>
+                              <option value="Storniert">Storniert</option>
+                            </select>
+                          </div>
+
+                          <div className="col-span-2 text-center">
+                            <select
+                              value={order.paymentMethod}
+                              onChange={(e) => updatePayment(order.id, e.target.value)}
+                              className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 cursor-pointer focus:outline-none"
+                            >
+                              <option value="offen">offen</option>
+                              <option value="bezahlt">bezahlt</option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Kompakte Artikel-Vorschau (Positionen & Gesamtmenge) */}
-                      <div className="col-span-3 text-gray-700 font-medium cursor-pointer" onClick={() => toggleExpand(order.id)}>
-                        {positionCount} {positionCount === 1 ? 'Position' : 'Positionen'} ({totalItems} {totalItems === 1 ? 'Artikel' : 'Artikel'})
+                        {isExpanded && (
+                          <div className="bg-gray-50/80 p-4 border-t border-gray-100">
+                            <div className="text-xs text-gray-500 mb-2">
+                              <strong>E-Mail:</strong> {order.customerEmail} | <strong>ID:</strong> {order.id}
+                            </div>
+                            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-gray-50 text-gray-400 border-b border-gray-100">
+                                  <tr>
+                                    <th className="p-2.5">Artikel</th>
+                                    <th className="p-2.5">Variante</th>
+                                    <th className="p-2.5 text-center">Menge</th>
+                                    <th className="p-2.5 text-right">Einzelpreis</th>
+                                    <th className="p-2.5 text-right">Gesamt</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {order.items?.map((item, idx) => (
+                                    <tr key={idx}>
+                                      <td className="p-2.5 font-semibold text-gray-900">{item.productName || item.name}</td>
+                                      <td className="p-2.5 text-gray-500">{[item.size ? `Größe ${item.size}` : null, item.color].filter(Boolean).join(' / ') || 'Standard'}</td>
+                                      <td className="p-2.5 text-center font-bold text-gray-700">{item.quantity}</td>
+                                      <td className="p-2.5 text-right text-gray-500">{item.price?.toFixed(2)} €</td>
+                                      <td className="p-2.5 text-right font-bold text-gray-900">{((item.price || 0) * item.quantity).toFixed(2)} €</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                      {/* Gesamtsumme */}
-                      <div className="col-span-2 text-right font-black text-gray-900">
-                        {order.totalAmount?.toFixed(2)} €
-                      </div>
+        {/* TAB 2: ARTIKEL VERWALTEN (ANLEGEN) */}
+        {activeTab === 'products' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Formular zum Anlegen */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Plus size={18} /> Neuen Artikel anlegen
+              </h2>
+              <form onSubmit={handleAddProduct} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Produktname</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProductName}
+                    onChange={(e) => setNewProductName(e.target.value)}
+                    placeholder="z.B. T-Shirt 'Special Edition'"
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Preis (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newProductPrice}
+                    onChange={(e) => setNewProductPrice(e.target.value)}
+                    placeholder="39.99"
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Beschreibung</label>
+                  <textarea
+                    value={newProductDesc}
+                    onChange={(e) => setNewProductDesc(e.target.value)}
+                    placeholder="Kurzbeschreibung..."
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 h-20"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-sm"
+                >
+                  Artikel speichern
+                </button>
+              </form>
+            </div>
 
-                      {/* Status Dropdown */}
-                      <div className="col-span-2 text-center">
-                        <select
-                          value={order.status}
-                          onChange={(e) => updateStatus(order.id, e.target.value)}
-                          className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 cursor-pointer focus:outline-none"
-                        >
-                          <option value="Eingegangen">Eingegangen</option>
-                          <option value="In Bearbeitung">In Bearbeitung</option>
-                          <option value="Abgeschlossen">Abgeschlossen</option>
-                          <option value="Storniert">Storniert</option>
-                        </select>
+            {/* Bestehende Artikel */}
+            <div className="md:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <h2 className="text-base font-bold text-gray-900">Aktive Artikel im Shop ({products.length})</h2>
+              {products.length === 0 ? (
+                <p className="text-xs text-gray-500">Keine Artikel gefunden. Lege links deinen ersten Artikel an.</p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {products.map((prod) => (
+                    <div key={prod.id} className="py-3 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{prod.name}</div>
+                        <div className="text-xs text-gray-500">{prod.description || 'Keine Beschreibung'}</div>
+                        <div className="text-xs font-semibold text-blue-600 mt-1">{prod.price?.toFixed(2)} €</div>
                       </div>
-
-                      {/* Bezahlung Dropdown */}
-                      <div className="col-span-2 text-center">
-                        <select
-                          value={order.paymentMethod}
-                          onChange={(e) => updatePayment(order.id, e.target.value)}
-                          className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 cursor-pointer focus:outline-none"
-                        >
-                          <option value="offen">offen</option>
-                          <option value="bezahlt">bezahlt</option>
-                        </select>
-                      </div>
+                      <button
+                        onClick={() => handleDeleteProduct(prod.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        title="Artikel löschen"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-
-                    {/* Aufklappbare Artikel-Details */}
-                    {isExpanded && (
-                      <div className="bg-gray-50/80 p-4 border-t border-gray-100">
-                        <div className="text-xs text-gray-500 mb-2">
-                          <strong>E-Mail:</strong> {order.customerEmail} | <strong>ID:</strong> {order.id}
-                        </div>
-                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-gray-50 text-gray-400 border-b border-gray-100">
-                              <tr>
-                                <th className="p-2.5">Artikel</th>
-                                <th className="p-2.5">Variante</th>
-                                <th className="p-2.5 text-center">Menge</th>
-                                <th className="p-2.5 text-right">Einzelpreis</th>
-                                <th className="p-2.5 text-right">Gesamt</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {order.items?.map((item, idx) => (
-                                <tr key={idx}>
-                                  <td className="p-2.5 font-semibold text-gray-900">{item.productName || item.name}</td>
-                                  <td className="p-2.5 text-gray-500">{[item.size ? `Größe ${item.size}` : null, item.color].filter(Boolean).join(' / ') || 'Standard'}</td>
-                                  <td className="p-2.5 text-center font-bold text-gray-700">{item.quantity}</td>
-                                  <td className="p-2.5 text-right text-gray-500">{item.price?.toFixed(2)} €</td>
-                                  <td className="p-2.5 text-right font-bold text-gray-900">{((item.price || 0) * item.quantity).toFixed(2)} €</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* TAB 3: BESTELLZEIT-FENSTER */}
+        {activeTab === 'settings' && (
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm max-w-xl space-y-4">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <Clock size={18} /> Bestellzeit-Fenster konfigurieren
+            </h2>
+            <p className="text-xs text-gray-500">
+              Lege fest, in welchem Zeitraum Kunden Bestellungen im Shop aufgeben dürfen.
+            </p>
+            <div className="space-y-4 pt-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={timeWindowEnabled}
+                  onChange={(e) => setTimeWindowEnabled(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="text-xs font-semibold text-gray-900">Bestellzeit-Fenster aktiv schalten</span>
+              </label>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Startzeit</label>
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Endzeit</label>
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => saveTimeWindow(timeWindowEnabled, startTime, endTime)}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-sm"
+              >
+                Einstellungen speichern
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
