@@ -168,22 +168,29 @@ export default function OrdersPage() {
                     onClick={() => toggleExpand(order.id)}
                     className="p-4 flex flex-col gap-3 cursor-pointer active:bg-gray-50/50"
                   >
-                    {/* Zeile 1: ID, Status, Preis */}
+                    {/* Zeile 1: Datum groß & schwarz + Status & Preis */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-gray-900 text-sm">{shortId}</span>
-                        {getStatusBadge(order.status)}
+                      <div>
+                        <div className="font-bold text-gray-900 text-base flex items-center gap-2">
+                          {formatDate(order.createdAt)}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          ID: {shortId}
+                        </div>
                       </div>
-                      <span className="text-base font-black text-gray-900">
-                        {order.totalAmount?.toFixed(2)} €
-                      </span>
+                      <div className="text-right">
+                        <span className="text-base font-black text-gray-900 block">
+                          {order.totalAmount?.toFixed(2)} €
+                        </span>
+                        <div className="mt-1">
+                          {getStatusBadge(order.status)}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Zeile 2: Meta-Infos */}
-                    <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-gray-100">
+                    {/* Zeile 2: Zahlung & Artikelanzahl */}
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(order.createdAt)}</span>
-                        <span>•</span>
                         <span>Zahlung: <strong className="text-gray-700">{order.paymentMethod || 'offen'}</strong></span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600 font-medium">
