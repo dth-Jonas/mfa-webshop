@@ -19,6 +19,8 @@ interface Order {
   createdAt: any;
   totalAmount: number;
   status: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
   items: OrderItem[];
 }
 
