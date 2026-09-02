@@ -43,15 +43,7 @@ const formatDate = (dateVal: any) => {
 };
 
 
-  const updatePaymentMethod = async (orderId: string, newMethod: string) => {
-    try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        paymentMethod: newMethod
-      });
-    } catch (error) {
-      console.error("Fehler beim Aktualisieren der Zahlungsart:", error);
-    }
-  };
+
 
 export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange }: any) {
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -124,9 +116,15 @@ export default function AdminOrdersList({ orders, onDeleteOrder, onStatusChange 
                     </select>
                   </td>
                   <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                    <span className="bg-red-50 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-full border border-red-100">
-                      ⚠️ {order.paymentStatus || 'Offen'}
-                    </span>
+                    <select
+                      value={order.paymentMethod || 'PayPal'}
+                      onChange={(e) => onStatusChange && onStatusChange(order.id, 'paymentMethod', e.target.value)}
+                      className="bg-gray-50 text-gray-800 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="PayPal">PayPal</option>
+                      <option value="Überweisung">Überweisung</option>
+                      <option value="BAR">BAR</option>
+                    </select>
                   </td>
                   <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                     <button
