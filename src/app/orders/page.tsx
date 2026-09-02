@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Trash2, ShoppingBag, ArrowLeft, Clock, CreditCard, Package } from 'lucide-react';
 import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // Pfad zu deiner Firebase-Konfiguration
+import { db } from '../../lib/firebase'; // Pfad zu deiner Firebase-Konfiguration
 
 interface OrderItem {
   productName?: string;
