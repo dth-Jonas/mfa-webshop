@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, getDocs, updateDoc, deleteDoc, addDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { ChevronDown, ChevronUp, Package, RefreshCw, Plus, Trash2, Clock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, RefreshCw, Plus, Trash2, Clock, Image as ImageIcon } from 'lucide-react';
 
 interface OrderItem {
   productName?: string;
@@ -31,6 +31,7 @@ interface Product {
   price: number;
   description?: string;
   image?: string;
+  category?: string;
 }
 
 export default function AdminPage() {
@@ -41,11 +42,13 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
-  // Products State
+  // Products State (Erweitert mit Foto/Bild-URL, Kategorie, etc.)
   const [products, setProducts] = useState<Product[]>([]);
   const [newProductName, setNewProductName] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
   const [newProductDesc, setNewProductDesc] = useState('');
+  const [newProductImage, setNewProductImage] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState('Textilien');
 
   // Settings / Time Window State
   const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
@@ -90,6 +93,7 @@ export default function AdminPage() {
           price: data.price || 0,
           description: data.description || '',
           image: data.image || '',
+          category: data.category || 'Textilien',
         });
       });
       setProducts(fetchedProducts);
@@ -101,20 +105,37 @@ export default function AdminPage() {
     }
   };
 
+  const fetchTimeWindowSettings = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'settings'));
+      let found = false;
+      querySnapshot.forEach((docSnap) => {
+        if (docSnap.id === 'timewindow') {
+          const data = docSnap.data();
+          setTimeWindowEnabled(!!data.enabled);
+          setStartTime(data.startTime || '08:00');
+          setEndTime(data.endTime || '20:00');
+          found = true;
+        }
+      });
+      if (!found) {
+        // Fallback auf localStorage falls in Firestore noch nicht angelegt
+        const savedWindow = localStorage.getItem('order_timewindow');
+        if (savedWindow) {
+          const parsed = JSON.parse(savedWindow);
+          setTimeWindowEnabled(parsed.enabled || false);
+          setStartTime(parsed.start || '08:00');
+          setEndTime(parsed.end || '20:00');
+        }
+      }
+    } catch (e) {
+      console.error("Fehler beim Laden des Zeitfensters:", e);
+    }
+  };
+
   useEffect(() => {
     fetchData();
-    // Lade lokale Zeitfenster-Einstellungen
-    const savedWindow = localStorage.getItem('order_timewindow');
-    if (savedWindow) {
-      try {
-        const parsed = JSON.parse(savedWindow);
-        setTimeWindowEnabled(parsed.enabled || false);
-        setStartTime(parsed.start || '08:00');
-        setEndTime(parsed.end || '20:00');
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    fetchTimeWindowSettings();
   }, []);
 
   const toggleExpand = (id: string) => {
@@ -165,12 +186,16 @@ export default function AdminPage() {
         name: newProductName,
         price: parseFloat(newProductPrice),
         description: newProductDesc,
+        image: newProductImage,
+        category: newProductCategory,
         createdAt: new Date()
       });
       setNewProductName('');
       setNewProductPrice('');
       setNewProductDesc('');
-      alert("Artikel erfolgreich hinzugefügt!");
+      setNewProductImage('');
+      setNewProductCategory('Textilien');
+      alert("Artikel mit Foto & Details erfolgreich angelegt!");
       fetchData();
     } catch (e) {
       console.error("Fehler beim Hinzufügen des Artikels:", e);
@@ -188,12 +213,25 @@ export default function AdminPage() {
     }
   };
 
-  const saveTimeWindow = (enabled: boolean, start: string, end: string) => {
+  const saveTimeWindow = async (enabled: boolean, start: string, end: string) => {
     setTimeWindowEnabled(enabled);
     setStartTime(start);
     setEndTime(end);
-    localStorage.setItem('order_timewindow', JSON.stringify({ enabled, start, end }));
-    alert("Bestellzeit-Fenster gespeichert!");
+    try {
+      const { setDoc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'settings', 'timewindow'), {
+        enabled,
+        startTime: start,
+        endTime: end,
+        updatedAt: new Date()
+      });
+      localStorage.setItem('order_timewindow', JSON.stringify({ enabled, start, end }));
+      alert("Bestellzeit-Fenster erfolgreich gespeichert & persistent in Firebase hinterlegt!");
+    } catch (e) {
+      console.error("Fehler beim Speichern des Zeitfensters in Firebase:", e);
+      localStorage.setItem('order_timewindow', JSON.stringify({ enabled, start, end }));
+      alert("Lokal gespeichert (Firebase-Fehler).");
+    }
   };
 
   const formatDate = (dateVal: any) => {
@@ -376,13 +414,13 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* TAB 2: ARTIKEL VERWALTEN (ANLEGEN) */}
+        {/* TAB 2: ARTIKEL VERWALTEN (ERWEITERT MIT FOTOS & KATEGORIEN) */}
         {activeTab === 'products' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Formular zum Anlegen */}
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
               <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                <Plus size={18} /> Neuen Artikel anlegen
+                <Plus size={18} /> Artikel anlegen (Erweitert)
               </h2>
               <form onSubmit={handleAddProduct} className="space-y-3">
                 <div>
@@ -396,15 +434,39 @@ export default function AdminPage() {
                     className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Preis (€)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={newProductPrice}
+                      onChange={(e) => setNewProductPrice(e.target.value)}
+                      placeholder="39.99"
+                      className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Kategorie</label>
+                    <select
+                      value={newProductCategory}
+                      onChange={(e) => setNewProductCategory(e.target.value)}
+                      className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 bg-white"
+                    >
+                      <option value="Textilien">Textilien</option>
+                      <option value="Accessoires">Accessoires</option>
+                      <option value="Sonstiges">Sonstiges</option>
+                    </select>
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Preis (€)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Produktfoto (Bild-URL)</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newProductPrice}
-                    onChange={(e) => setNewProductPrice(e.target.value)}
-                    placeholder="39.99"
+                    type="url"
+                    value={newProductImage}
+                    onChange={(e) => setNewProductImage(e.target.value)}
+                    placeholder="https://example.com/bild.jpg"
                     className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -413,7 +475,7 @@ export default function AdminPage() {
                   <textarea
                     value={newProductDesc}
                     onChange={(e) => setNewProductDesc(e.target.value)}
-                    placeholder="Kurzbeschreibung..."
+                    placeholder="Detaillierte Produktbeschreibung..."
                     className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 h-20"
                   />
                 </div>
@@ -426,7 +488,7 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* Bestehende Artikel */}
+            {/* Bestehende Artikel mit Vorschaubildern */}
             <div className="md:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
               <h2 className="text-base font-bold text-gray-900">Aktive Artikel im Shop ({products.length})</h2>
               {products.length === 0 ? (
@@ -434,15 +496,27 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-gray-100">
                   {products.map((prod) => (
-                    <div key={prod.id} className="py-3 flex items-center justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-bold text-gray-900">{prod.name}</div>
-                        <div className="text-xs text-gray-500">{prod.description || 'Keine Beschreibung'}</div>
-                        <div className="text-xs font-semibold text-blue-600 mt-1">{prod.price?.toFixed(2)} €</div>
+                    <div key={prod.id} className="py-3.5 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        {prod.image ? (
+                          <img src={prod.image} alt={prod.name} className="w-12 h-12 object-cover rounded-xl border border-gray-200 shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-100 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                            <ImageIcon size={20} />
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-sm font-bold text-gray-900">{prod.name}</div>
+                          <div className="text-xs text-gray-500 line-clamp-1">{prod.description || 'Keine Beschreibung'}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">{prod.category || 'Textilien'}</span>
+                            <span className="text-xs font-bold text-blue-600">{prod.price?.toFixed(2)} €</span>
+                          </div>
+                        </div>
                       </div>
                       <button
                         onClick={() => handleDeleteProduct(prod.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors shrink-0"
                         title="Artikel löschen"
                       >
                         <Trash2 size={16} />
@@ -462,7 +536,7 @@ export default function AdminPage() {
               <Clock size={18} /> Bestellzeit-Fenster konfigurieren
             </h2>
             <p className="text-xs text-gray-500">
-              Lege fest, in welchem Zeitraum Kunden Bestellungen im Shop aufgeben dürfen.
+              Lege fest, in welchem Zeitraum Kunden Bestellungen im Shop aufgeben dürfen. Die Zeiten werden zentral in Firebase gespeichert.
             </p>
             <div className="space-y-4 pt-2">
               <label className="flex items-center gap-3 cursor-pointer">
@@ -500,7 +574,7 @@ export default function AdminPage() {
                 onClick={() => saveTimeWindow(timeWindowEnabled, startTime, endTime)}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-sm"
               >
-                Einstellungen speichern
+                Einstellungen in Firebase speichern
               </button>
             </div>
           </div>
