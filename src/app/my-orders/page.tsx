@@ -8,26 +8,6 @@ import { Order } from '../../lib/types';
 import Link from 'next/link';
 
 
-const parseDate = (dateVal: any): Date | null => {
-  if (!dateVal) return null;
-  if (typeof dateVal.toDate === 'function') return dateVal.toDate();
-  if (dateVal.seconds) return new Date(dateVal.seconds * 1000);
-  const parsed = new Date(dateVal);
-  return isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatDate = (dateVal: any): string => {
-  const date = parseDate(dateVal);
-  if (!date) return 'Unbekannt';
-  return date.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }) + ' Uhr';
-};
-
 
 const formatDate = (dateVal: any) => {
   if (!dateVal) return 'Unbekanntes Datum';
