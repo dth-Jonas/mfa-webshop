@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/auth';
 
@@ -28,20 +28,36 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
+  // Firestore & User-basierte Warenkorb-Synchronisation
   useEffect(() => {
-    const savedCart = localStorage.getItem('mfa_cart');
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (e) {
-        console.error('Fehler beim Laden des Warenkorbs:', e);
-      }
-    }
-
     if (user?.displayName) {
       setCustomerName(user.displayName);
     }
 
+    if (!user) {
+      setCart([]);
+      localStorage.removeItem('mfa_cart');
+      return;
+    }
+
+    // Firestore-Listener für den benutzerspezifischen Warenkorb
+    const cartRef = doc(db, 'carts', user.uid);
+    const unsubCart = onSnapshot(cartRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const items = docSnap.data().items || [];
+        setCart(items);
+        localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(items));
+      } else {
+        setCart([]);
+        localStorage.removeItem(`mfa_cart_${user.uid}`);
+      }
+    });
+
+    return () => unsubCart();
+  }, [user]);
+
+  // Aktivität im Bestellzeitfenster prüfen
+  useEffect(() => {
     const unsubWindows = onSnapshot(collection(db, 'orderWindows'), (snapshot) => {
       const now = new Date();
       const openWindow = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).find((w: any) => {
@@ -55,11 +71,25 @@ export default function CartPage() {
     });
 
     return () => unsubWindows();
-  }, [user]);
+  }, []);
 
-  const saveCart = (newCart: CartItem[]) => {
+  // Warenkorb in Firestore speichern
+  const saveCart = async (newCart: CartItem[]) => {
     setCart(newCart);
-    localStorage.setItem('mfa_cart', JSON.stringify(newCart));
+    if (!user) return;
+
+    try {
+      const cartRef = doc(db, 'carts', user.uid);
+      if (newCart.length === 0) {
+        await deleteDoc(cartRef);
+        localStorage.removeItem(`mfa_cart_${user.uid}`);
+      } else {
+        await setDoc(cartRef, { items: newCart, updatedAt: serverTimestamp() });
+        localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(newCart));
+      }
+    } catch (e) {
+      console.error('Fehler beim Speichern des Warenkorbs in Firestore:', e);
+    }
   };
 
   const updateQuantity = (cartId: string, delta: number) => {
@@ -104,7 +134,7 @@ export default function CartPage() {
         status: 'eingegangen',
       });
 
-      saveCart([]);
+      await saveCart([]);
       setOrderSuccess(true);
     } catch (err) {
       console.error('Fehler beim Absenden:', err);
