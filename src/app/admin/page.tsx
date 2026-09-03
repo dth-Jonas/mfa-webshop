@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { useAuth } from '../../lib/auth';
 
 interface OrderItem {
   cartId: string;
@@ -23,6 +22,7 @@ interface Order {
   items: OrderItem[];
   totalAmount: number;
   status: string;
+  paymentStatus?: string;
   createdAt: any;
 }
 
@@ -34,20 +34,17 @@ const PAYMENT_STATUSES = [
 ];
 
 export default function AdminPage() {
-  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Alle Bestellungen für den Admin laden
     const unsub = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const fetched = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       })) as Order[];
 
-      // Sortieren: Neueste zuerst
       fetched.sort((a, b) => {
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
         const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
@@ -69,18 +66,20 @@ export default function AdminPage() {
     try {
       const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, {
+        paymentStatus: newStatus,
         status: newStatus,
       });
     } catch (err) {
-      console.error("Fehler beim Aktualisieren des Status:", err);
-      alert("Status konnte nicht geändert werden.");
+      console.error("Fehler beim Aktualisieren des Zahlungsstatus:", err);
+      alert("Zahlungsstatus konnte nicht geändert werden.");
     } finally {
       setUpdatingId(null);
     }
   };
 
   const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
+    const uppercaseStatus = status.toUpperCase();
+    switch (uppercaseStatus) {
       case 'BARZAHLUNG':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'PAYPAL':
@@ -115,11 +114,10 @@ export default function AdminPage() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
-            const currentStatus = order.status || 'OFFEN';
+            const currentStatus = order.paymentStatus || order.status || 'OFFEN';
 
             return (
               <div key={order.id} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                {/* Header-Informationen zur Bestellung */}
                 <div className="flex flex-wrap justify-between items-start border-b pb-4 gap-4">
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Kunde</span>
@@ -139,31 +137,27 @@ export default function AdminPage() {
                     <p className="text-xs font-mono font-bold text-gray-600 mt-0.5">{order.id}</p>
                   </div>
 
-                  {/* Bezahl-Status Auswahl */}
                   <div className="min-w-[180px]">
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                      Bezahl-Status
+                      Zahlungsstatus
                     </label>
-                    <div className="relative">
-                      <select
-                        value={currentStatus}
-                        disabled={updatingId === order.id}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                        className={`w-full text-xs font-bold px-3 py-2 rounded-xl border transition-all cursor-pointer ${getStatusBadgeStyle(
-                          currentStatus
-                        )} ${updatingId === order.id ? 'opacity-50' : ''}`}
-                      >
-                        {PAYMENT_STATUSES.map((st) => (
-                          <option key={st} value={st} className="bg-white text-gray-900 font-medium">
-                            {st}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <select
+                      value={PAYMENT_STATUSES.includes(currentStatus) ? currentStatus : 'OFFEN'}
+                      disabled={updatingId === order.id}
+                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                      className={`w-full text-xs font-bold px-3 py-2 rounded-xl border transition-all cursor-pointer ${getStatusBadgeStyle(
+                        currentStatus
+                      )} ${updatingId === order.id ? 'opacity-50' : ''}`}
+                    >
+                      {PAYMENT_STATUSES.map((st) => (
+                        <option key={st} value={st} className="bg-white text-gray-900 font-medium">
+                          {st}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                {/* Artikelliste */}
                 <div className="divide-y border-b pb-3">
                   {order.items?.map((item, idx) => (
                     <div key={idx} className="py-2 flex justify-between items-center text-xs">
@@ -180,7 +174,6 @@ export default function AdminPage() {
                   ))}
                 </div>
 
-                {/* Gesamtsumme */}
                 <div className="flex justify-between items-center pt-1 text-sm font-black">
                   <span>Gesamtsumme:</span>
                   <span className="text-blue-600 text-base">{order.totalAmount?.toFixed(2)} €</span>

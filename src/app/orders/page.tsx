@@ -23,6 +23,7 @@ interface Order {
   items: OrderItem[];
   totalAmount: number;
   status: string;
+  paymentStatus?: string;
   createdAt: any;
 }
 
@@ -63,7 +64,8 @@ export default function UserOrdersPage() {
   }, [user]);
 
   const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
+    const uppercaseStatus = status.toUpperCase();
+    switch (uppercaseStatus) {
       case 'BARZAHLUNG':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'PAYPAL':
@@ -110,7 +112,7 @@ export default function UserOrdersPage() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
-            const currentStatus = order.status || 'OFFEN';
+            const currentPaymentStatus = order.paymentStatus || order.status || 'OFFEN';
 
             return (
               <div key={order.id} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
@@ -127,8 +129,8 @@ export default function UserOrdersPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Zahlungsstatus</span>
-                    <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full border ${getStatusBadgeStyle(currentStatus)}`}>
-                      {currentStatus}
+                    <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full border ${getStatusBadgeStyle(currentPaymentStatus)}`}>
+                      {currentPaymentStatus}
                     </span>
                   </div>
                 </div>
