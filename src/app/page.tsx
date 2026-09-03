@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product } from '../lib/types';
 import { useAuth } from '../lib/auth';
@@ -30,7 +30,8 @@ export default function HomePage() {
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
 
-  // Cart Counter
+  // Cart State & Counter
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
@@ -51,28 +52,37 @@ export default function HomePage() {
       setActiveWindow(openWindow || null);
     });
 
-    updateCartCount();
-
     return () => {
       unsubProducts();
       unsubWindows();
     };
   }, []);
 
-  const updateCartCount = () => {
-    const savedCart = localStorage.getItem('mfa_cart');
-    if (savedCart) {
-      try {
-        const cart: CartItem[] = JSON.parse(savedCart);
-        const total = cart.reduce((sum, item) => sum + item.quantity, 0);
-        setCartCount(total);
-      } catch (e) {
+  // Warenkorb in Echtzeit laden (Firestore wenn eingeloggt, sonst localStorage)
+  useEffect(() => {
+    if (!user) {
+      const savedCart = localStorage.getItem('mfa_cart_guest');
+      const items: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
+      setCartItems(items);
+      setCartCount(items.reduce((sum, item) => sum + item.quantity, 0));
+      return;
+    }
+
+    const cartRef = doc(db, 'carts', user.uid);
+    const unsubCart = onSnapshot(cartRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const items: CartItem[] = docSnap.data().items || [];
+        setCartItems(items);
+        setCartCount(items.reduce((sum, item) => sum + item.quantity, 0));
+        localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(items));
+      } else {
+        setCartItems([]);
         setCartCount(0);
       }
-    } else {
-      setCartCount(0);
-    }
-  };
+    });
+
+    return () => unsubCart();
+  }, [user]);
 
   const getVariantPrice = (product: any, size: string, color: string): number => {
     if (!product) return 0;
@@ -100,23 +110,22 @@ export default function HomePage() {
     setSelectedColor(p.colors && p.colors.length > 0 ? p.colors[0] : '');
   };
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!selectedProduct) return;
 
     const currentPrice = getVariantPrice(selectedProduct, selectedSize, selectedColor);
     const cartId = `${selectedProduct.id}-${selectedSize}-${selectedColor}-${currentPrice}`;
     const displayImg = selectedProduct.imageUrl || (selectedProduct.images && selectedProduct.images[0]) || '';
 
-    const savedCart = localStorage.getItem('mfa_cart');
-    let currentCart: CartItem[] = savedCart ? JSON.parse(savedCart) : [];
+    let updatedCart = [...cartItems];
+    const existing = updatedCart.find((item) => item.cartId === cartId);
 
-    const existing = currentCart.find((item) => item.cartId === cartId);
     if (existing) {
-      currentCart = currentCart.map((item) =>
+      updatedCart = updatedCart.map((item) =>
         item.cartId === cartId ? { ...item, quantity: item.quantity + 1 } : item
       );
     } else {
-      currentCart.push({
+      updatedCart.push({
         cartId,
         productId: selectedProduct.id,
         name: selectedProduct.name,
@@ -128,8 +137,19 @@ export default function HomePage() {
       });
     }
 
-    localStorage.setItem('mfa_cart', JSON.stringify(currentCart));
-    updateCartCount();
+    if (user) {
+      try {
+        const cartRef = doc(db, 'carts', user.uid);
+        await setDoc(cartRef, { items: updatedCart, updatedAt: serverTimestamp() });
+      } catch (err) {
+        console.error('Fehler beim Speichern in Firestore:', err);
+      }
+    } else {
+      localStorage.setItem('mfa_cart_guest', JSON.stringify(updatedCart));
+      setCartItems(updatedCart);
+      setCartCount(updatedCart.reduce((sum, item) => sum + item.quantity, 0));
+    }
+
     setSelectedProduct(null);
   };
 
@@ -323,6 +343,7 @@ export default function HomePage() {
                             onClick={() => setSelectedSize(s)}
                             className={`text-xs font-bold px-3 py-1.5 rounded-xl border ${
                               selectedSize === s
+                                ? 'bg-blue-600 text-white border-blue-600'
                                 ? 'bg-blue-600 text-white border-blue-600'
                                 : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                             }`}
