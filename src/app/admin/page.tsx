@@ -331,12 +331,18 @@ export default function AdminPage() {
             >
               Artikel verwalten ({products.length})
             </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            <a
+              href="/admin/products"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
             >
-              Bestellzeit-Fenster
-            </button>
+              Profi-Produktmaske ↗
+            </a>
+            <a
+              href="/admin/order-windows"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              Datum-Bestellfenster ↗
+            </a>
           </div>
         </div>
 
