@@ -74,6 +74,7 @@ export default function AdminPage() {
         setIsAdmin(false);
       }
       setAuthLoading(false);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
