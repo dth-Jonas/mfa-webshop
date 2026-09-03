@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, getDocs, updateDoc, deleteDoc, addDoc, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '../../lib/auth';
 import { ChevronDown, ChevronUp, Package, RefreshCw, Plus, Trash2, Clock, ShieldAlert } from 'lucide-react';
 
 interface OrderItem {
@@ -40,6 +41,7 @@ interface Product {
 }
 
 export default function AdminPage() {
+  const { user, loginWithGoogle } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'settings'>('orders');
@@ -288,8 +290,19 @@ export default function AdminPage() {
           <ShieldAlert size={48} className="mx-auto text-red-500" />
           <h1 className="text-xl font-bold text-gray-900">Zugriff verweigert</h1>
           <p className="text-xs text-gray-500">
-            Du bist entweder nicht eingeloggt oder dein Google-Account ist nicht als Administrator berechtigt. Bitte logge dich mit <span className="font-semibold text-gray-800">Dth-jonas@gmx.de</span> ein.
+            {user ? (
+              <>Eingeloggt als <span className="font-semibold text-gray-800">{user.email}</span>. Dieser Account ist kein Administrator.</>
+            ) : (
+              <>Du bist nicht eingeloggt.</>
+            )}
+            {" "}Bitte logge dich mit <span className="font-semibold text-gray-800">Dth-jonas@gmx.de</span> ein.
           </p>
+          <button
+            onClick={loginWithGoogle}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-sm"
+          >
+            Mit Google als Admin anmelden
+          </button>
         </div>
       </div>
     );
