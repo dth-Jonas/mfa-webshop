@@ -38,7 +38,6 @@ export default function UserOrdersPage() {
       return;
     }
 
-    // Nur Bestellungen laden, die dem aktuell eingeloggten Nutzer gehören
     const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
 
     const unsub = onSnapshot(q, (snapshot) => {
@@ -47,7 +46,6 @@ export default function UserOrdersPage() {
         ...doc.data(),
       })) as Order[];
 
-      // Nach Datum sortieren (neueste zuerst)
       fetchedOrders.sort((a, b) => {
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
         const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
@@ -63,6 +61,19 @@ export default function UserOrdersPage() {
 
     return () => unsub();
   }, [user]);
+
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status) {
+      case 'BARZAHLUNG':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'PAYPAL':
+        return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'ÜBERWEISUNG':
+        return 'bg-purple-100 text-purple-800 border-purple-300';
+      default:
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+    }
+  };
 
   if (!user) {
     return (
@@ -98,49 +109,53 @@ export default function UserOrdersPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
-            <div key={order.id} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-              <div className="flex flex-wrap justify-between items-center border-b pb-3 gap-2">
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Bestell-ID</span>
-                  <span className="text-xs font-mono font-bold text-gray-700">{order.id}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Datum</span>
-                  <span className="text-xs font-bold text-gray-700">
-                    {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('de-DE') : 'Neu'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Status</span>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    {order.status || 'offen'}
-                  </span>
-                </div>
-              </div>
+          {orders.map((order) => {
+            const currentStatus = order.status || 'OFFEN';
 
-              <div className="divide-y">
-                {order.items?.map((item, idx) => (
-                  <div key={idx} className="py-2 flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-bold text-gray-900">{item.name}</p>
-                      <p className="text-[10px] text-gray-400">
-                        {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-700">{item.quantity}x {item.price?.toFixed(2)} €</p>
-                    </div>
+            return (
+              <div key={order.id} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                <div className="flex flex-wrap justify-between items-center border-b pb-3 gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Bestell-ID</span>
+                    <span className="text-xs font-mono font-bold text-gray-700">{order.id}</span>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Datum</span>
+                    <span className="text-xs font-bold text-gray-700">
+                      {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('de-DE') : 'Neu'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Zahlungsstatus</span>
+                    <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full border ${getStatusBadgeStyle(currentStatus)}`}>
+                      {currentStatus}
+                    </span>
+                  </div>
+                </div>
 
-              <div className="border-t pt-3 flex justify-between items-center text-sm font-black">
-                <span>Gesamtsumme:</span>
-                <span className="text-blue-600">{order.totalAmount?.toFixed(2)} €</span>
+                <div className="divide-y">
+                  {order.items?.map((item, idx) => (
+                    <div key={idx} className="py-2 flex justify-between items-center text-xs">
+                      <div>
+                        <p className="font-bold text-gray-900">{item.name}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-gray-700">{item.quantity}x {item.price?.toFixed(2)} €</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t pt-3 flex justify-between items-center text-sm font-black">
+                  <span>Gesamtsumme:</span>
+                  <span className="text-blue-600">{order.totalAmount?.toFixed(2)} €</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

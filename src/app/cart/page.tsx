@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/auth';
 
@@ -18,82 +18,55 @@ interface CartItem {
 }
 
 export default function CartPage() {
-  const { user, loginWithGoogle } = useAuth();
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeWindow, setActiveWindow] = useState<any>(null);
-  const [loadingWindow, setLoadingWindow] = useState(true);
-
-  const [customerName, setCustomerName] = useState('');
-  const [customerNote, setCustomerNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { user } = useAuth();
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Firestore & User-basierte Warenkorb-Synchronisation
   useEffect(() => {
-    if (user?.displayName) {
-      setCustomerName(user.displayName);
-    }
-
     if (!user) {
-      setCart([]);
-      localStorage.removeItem('mfa_cart');
+      const savedCart = localStorage.getItem('mfa_cart_guest');
+      setCartItems(savedCart ? JSON.parse(savedCart) : []);
+      setLoading(false);
       return;
     }
 
-    // Firestore-Listener für den benutzerspezifischen Warenkorb
     const cartRef = doc(db, 'carts', user.uid);
-    const unsubCart = onSnapshot(cartRef, (docSnap) => {
+    const unsub = onSnapshot(cartRef, (docSnap) => {
       if (docSnap.exists()) {
-        const items = docSnap.data().items || [];
-        setCart(items);
-        localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(items));
+        setCartItems(docSnap.data().items || []);
       } else {
-        setCart([]);
-        localStorage.removeItem(`mfa_cart_${user.uid}`);
+        setCartItems([]);
       }
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore Cart Error:", err);
+      // Fallback auf localStorage, falls Firestore Rules blockieren
+      const savedCart = localStorage.getItem(`mfa_cart_${user.uid}`);
+      setCartItems(savedCart ? JSON.parse(savedCart) : []);
+      setLoading(false);
     });
 
-    return () => unsubCart();
+    return () => unsub();
   }, [user]);
 
-  // Aktivität im Bestellzeitfenster prüfen
-  useEffect(() => {
-    const unsubWindows = onSnapshot(collection(db, 'orderWindows'), (snapshot) => {
-      const now = new Date();
-      const openWindow = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).find((w: any) => {
-        if (!w.startDate || !w.endDate) return false;
-        const start = new Date(w.startDate);
-        const end = new Date(w.endDate);
-        return now >= start && now <= end;
-      });
-      setActiveWindow(openWindow || null);
-      setLoadingWindow(false);
-    });
-
-    return () => unsubWindows();
-  }, []);
-
-  // Warenkorb in Firestore speichern
-  const saveCart = async (newCart: CartItem[]) => {
-    setCart(newCart);
-    if (!user) return;
-
-    try {
-      const cartRef = doc(db, 'carts', user.uid);
-      if (newCart.length === 0) {
-        await deleteDoc(cartRef);
-        localStorage.removeItem(`mfa_cart_${user.uid}`);
-      } else {
-        await setDoc(cartRef, { items: newCart, updatedAt: serverTimestamp() });
-        localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(newCart));
+  const updateCart = async (newItems: CartItem[]) => {
+    setCartItems(newItems);
+    if (user) {
+      localStorage.setItem(`mfa_cart_${user.uid}`, JSON.stringify(newItems));
+      try {
+        await setDoc(doc(db, 'carts', user.uid), { items: newItems, updatedAt: serverTimestamp() });
+      } catch (e) {
+        console.error("Fehler beim Aktualisieren im Firestore:", e);
       }
-    } catch (e) {
-      console.error('Fehler beim Speichern des Warenkorbs in Firestore:', e);
+    } else {
+      localStorage.setItem('mfa_cart_guest', JSON.stringify(newItems));
     }
   };
 
-  const updateQuantity = (cartId: string, delta: number) => {
-    const updated = cart
+  const changeQuantity = (cartId: string, delta: number) => {
+    const updated = cartItems
       .map((item) => {
         if (item.cartId === cartId) {
           const newQty = item.quantity + delta;
@@ -103,238 +76,141 @@ export default function CartPage() {
       })
       .filter(Boolean) as CartItem[];
 
-    saveCart(updated);
+    updateCart(updated);
   };
 
   const removeItem = (cartId: string) => {
-    const updated = cart.filter((item) => item.cartId !== cartId);
-    saveCart(updated);
+    const updated = cartItems.filter((item) => item.cartId !== cartId);
+    updateCart(updated);
   };
 
-  const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleCheckout = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || cart.length === 0 || !activeWindow) return;
+  const handleCheckout = async () => {
+    if (!user || cartItems.length === 0) return;
+    setIsSubmitting(true);
 
-    setSubmitting(true);
     try {
       await addDoc(collection(db, 'orders'), {
-        userEmail: user?.email || '',
         userId: user.uid,
-        email: user.email?.toLowerCase(),
-        userName: customerName || user.displayName || user.email || 'Unbenannt',
-        customerName: customerName || user.displayName || 'Unbenannt',
-        windowId: activeWindow.id,
-        windowTitle: activeWindow.title || 'Bestellfenster',
-        note: customerNote,
-        items: cart,
+        userName: user.displayName || 'Unbekannt',
+        userEmail: user.email || '',
+        items: cartItems,
         totalAmount: totalPrice,
+        status: 'offen',
         createdAt: serverTimestamp(),
-        status: 'eingegangen',
       });
 
-      await saveCart([]);
+      // Warenkorb nach Bestellung leeren
+      await updateCart([]);
       setOrderSuccess(true);
     } catch (err) {
-      console.error('Fehler beim Absenden:', err);
-      alert('Fehler beim Absenden der Bestellung.');
+      console.error('Fehler bei der Bestellung:', err);
+      alert('Bestellung fehlgeschlagen. Bitte versuche es erneut.');
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
+  if (loading) return <div className="p-8 text-center text-xs font-bold text-gray-400">Warenkorb wird geladen...</div>;
+
+  if (orderSuccess) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-3xl border text-center space-y-4">
+        <span className="text-4xl">🎉</span>
+        <h1 className="text-xl font-black text-gray-900">Vielen Dank für deine Bestellung!</h1>
+        <p className="text-xs text-gray-500">Deine Bestellung wurde erfolgreich übermittelt.</p>
+        <Link href="/" className="inline-block bg-blue-600 text-white font-bold text-xs px-6 py-3 rounded-2xl">
+          Zurück zum Shop
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8 font-sans">
-      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900">🛒 Dein Warenkorb</h1>
-          <p className="text-xs font-semibold text-gray-500 mt-1">
-            Überprüfe deine Auswahl und schließe deine Bestellung ab.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {user && (
-            <Link
-              href="/orders"
-              className="text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-xl transition-all"
-            >
-              📦 Meine Bestellungen
-            </Link>
-          )}
-          <Link
-            href="/"
-            className="text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-xl transition-all"
-          >
-            ← Zum Shop
-          </Link>
-        </div>
+    <div className="max-w-3xl mx-auto p-6 space-y-6 font-sans">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-black text-gray-900">Dein Warenkorb</h1>
+        <Link href="/" className="text-xs font-bold text-gray-500 hover:text-gray-900">
+          ← Weiter einkaufen
+        </Link>
       </div>
 
-      {orderSuccess ? (
-        <div className="p-8 bg-emerald-50 border border-emerald-200 rounded-3xl text-center space-y-4">
-          <span className="text-4xl">🎉</span>
-          <h2 className="text-xl font-bold text-emerald-900">Vielen Dank für deine Bestellung!</h2>
-          <p className="text-xs text-emerald-700 max-w-md mx-auto">
-            Deine Bestellung wurde während des aktuellen Bestellfensters hinterlegt. Du kannst deine Bestellung jederzeit einsehen und bearbeiten, solange das Fenster geöffnet ist.
-          </p>
-          <div className="flex justify-center gap-3 pt-2">
-            <Link
-              href="/orders"
-              className="bg-emerald-600 text-white text-xs font-bold px-6 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-md"
-            >
-              Bestellungen verwalten
-            </Link>
-            <Link
-              href="/"
-              className="bg-white text-emerald-800 border border-emerald-300 text-xs font-bold px-6 py-3 rounded-xl hover:bg-emerald-100 transition-all"
-            >
-              Weiter einkaufen
-            </Link>
-          </div>
-        </div>
-      ) : cart.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border border-gray-200 text-center space-y-4">
-          <span className="text-4xl">🛒</span>
-          <p className="text-sm font-bold text-gray-500">Dein Warenkorb ist aktuell leer.</p>
-          <Link
-            href="/"
-            className="inline-block bg-blue-600 text-white font-bold text-xs px-6 py-3 rounded-xl hover:bg-blue-700 transition-all"
-          >
+      {cartItems.length === 0 ? (
+        <div className="bg-white p-12 rounded-3xl border text-center space-y-4">
+          <p className="text-sm font-bold text-gray-400">Dein Warenkorb ist noch leer.</p>
+          <Link href="/" className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl">
             Jetzt Produkte entdecken
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Ausgewählte Artikel</h2>
-              <div className="divide-y divide-gray-100">
-                {cart.map((item) => (
-                  <div key={item.cartId} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      {item.imageUrl && (
-                        <div className="w-16 h-16 bg-gray-50 rounded-2xl border border-gray-100 p-1 flex-shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.imageUrl} alt="" className="w-full h-full object-contain" />
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900">{item.name}</h3>
-                        <p className="text-xs text-gray-500">
-                          Größe: {item.size || '-'} | Farbe: {item.color || '-'}
-                        </p>
-                        <p className="text-xs font-black text-blue-600 mt-1">
-                          {item.price.toFixed(2)} € / Stk.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1">
-                        <button
-                          onClick={() => updateQuantity(item.cartId, -1)}
-                          className="w-6 h-6 bg-white border rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100"
-                        >
-                          -
-                        </button>
-                        <span className="text-xs font-bold text-gray-900 w-4 text-center">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(item.cartId, 1)}
-                          className="w-6 h-6 bg-white border rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => removeItem(item.cartId)}
-                        className="text-gray-400 hover:text-red-500 font-bold text-xs p-1"
-                        title="Artikel entfernen"
-                      >
-                        ✕
-                      </button>
-                    </div>
+        <div className="space-y-4">
+          <div className="bg-white rounded-3xl border divide-y overflow-hidden">
+            {cartItems.map((item) => (
+              <div key={item.cartId} className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {item.imageUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={item.imageUrl} alt="" className="w-12 h-12 rounded-xl object-contain bg-gray-50 border p-1" />
+                  )}
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900">{item.name}</h3>
+                    <p className="text-[10px] text-gray-400 font-semibold">
+                      {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
+                    </p>
+                    <p className="text-xs font-black text-blue-600 mt-0.5">{item.price.toFixed(2)} €</p>
                   </div>
-                ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center border rounded-xl overflow-hidden bg-gray-50">
+                    <button
+                      onClick={() => changeQuantity(item.cartId, -1)}
+                      className="px-2.5 py-1 text-xs font-bold hover:bg-gray-200"
+                    >
+                      -
+                    </button>
+                    <span className="px-2 text-xs font-bold">{item.quantity}</span>
+                    <button
+                      onClick={() => changeQuantity(item.cartId, 1)}
+                      className="px-2.5 py-1 text-xs font-bold hover:bg-gray-200"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => removeItem(item.cartId)}
+                    className="text-red-500 hover:text-red-700 text-xs font-bold p-1"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Bestellübersicht</h2>
-
-              <div className="border-t border-b py-3 flex justify-between items-center text-base font-black text-gray-900">
-                <span>Gesamtsumme:</span>
-                <span className="text-blue-600">{totalPrice.toFixed(2)} €</span>
-              </div>
-
-              {!user ? (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-center space-y-3">
-                  <p className="text-xs font-bold text-gray-700">Anmeldung erforderlich</p>
-                  <p className="text-[11px] text-gray-500">
-                    Melde dich mit Google an, um deine Bestellung deinem Konto zuzuordnen.
-                  </p>
-                  <button
-                    onClick={loginWithGoogle}
-                    className="w-full bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs transition-all"
-                  >
-                    🔑 Mit Google anmelden
-                  </button>
-                </div>
-              ) : loadingWindow ? (
-                <p className="text-xs text-gray-400">Prüfe Bestellfenster...</p>
-              ) : activeWindow ? (
-                <form onSubmit={handleCheckout} className="space-y-3 pt-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">E-Mail (Google-Konto)</label>
-                    <input
-                      type="email"
-                      disabled
-                      value={user.email || ''}
-                      className="w-full text-xs p-3 rounded-xl border border-gray-100 bg-gray-50 text-gray-500 font-medium"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Anmerkung (optional)</label>
-                    <textarea
-                      placeholder="Anmerkungen zur Bestellung"
-                      value={customerNote}
-                      onChange={(e) => setCustomerNote(e.target.value)}
-                      className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-600 h-20"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl text-xs transition-all shadow-md disabled:opacity-50 mt-2"
-                  >
-                    {submitting ? 'Bestellung wird gesendet...' : 'Kostenpflichtig bestellen'}
-                  </button>
-                </form>
-              ) : (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-1">
-                  <p className="text-xs font-bold text-amber-900">🔒 Katalogmodus</p>
-                  <p className="text-[11px] text-amber-700">
-                    Das Bestellfenster ist aktuell geschlossen. Es können keine Bestellungen abgesendet werden.
-                  </p>
-                </div>
-              )}
+          <div className="bg-white p-6 rounded-3xl border space-y-4">
+            <div className="flex justify-between items-center text-sm font-black">
+              <span>Gesamtsumme:</span>
+              <span className="text-blue-600 text-base">{totalPrice.toFixed(2)} €</span>
             </div>
+
+            {user ? (
+              <button
+                onClick={handleCheckout}
+                disabled={isSubmitting}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl text-xs transition-all shadow-md disabled:opacity-50"
+              >
+                {isSubmitting ? 'Bestellung wird gesendet...' : 'Kostenpflichtig bestellen'}
+              </button>
+            ) : (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+                <p className="text-xs font-bold text-amber-800">
+                  Bitte melde dich an, um die Bestellung abzuschließen.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
