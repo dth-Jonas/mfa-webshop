@@ -70,7 +70,7 @@ export default function AdminPage() {
   // Admin-Berechtigung prüfen anhand der Google-Mail
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && user.email === 'Dth-jonas@gmx.de') {
+      if (user && user.email?.toLowerCase() === 'dth-jonas@gmx.de'.toLowerCase()) {
         setIsAdmin(true);
       } else {
         setIsAdmin(false);
