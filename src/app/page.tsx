@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product } from '../lib/types';
 import { useAuth } from '../lib/auth';
@@ -343,7 +343,6 @@ export default function HomePage() {
                             onClick={() => setSelectedSize(s)}
                             className={`text-xs font-bold px-3 py-1.5 rounded-xl border ${
                               selectedSize === s
-                                ? 'bg-blue-600 text-white border-blue-600'
                                 ? 'bg-blue-600 text-white border-blue-600'
                                 : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                             }`}
