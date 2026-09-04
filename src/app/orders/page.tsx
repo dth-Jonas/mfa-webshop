@@ -2,7 +2,7 @@
 
 import { useAuth } from '../../lib/auth';
 import { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
@@ -37,8 +37,7 @@ export default function CustomerOrdersPage() {
       try {
         const q = query(
           collection(db, 'orders'),
-          where('userId', '==', user.uid),
-          orderBy('createdAt', 'desc')
+          where('userId', '==', user.uid)
         );
         const snapshot = await getDocs(q);
         const fetchedOrders = snapshot.docs.map((doc) => ({
@@ -46,6 +45,12 @@ export default function CustomerOrdersPage() {
           ...doc.data(),
         })) as Order[];
         
+        fetchedOrders.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+
         setOrders(fetchedOrders);
         if (fetchedOrders.length > 0) {
           setExpandedOrders({ [fetchedOrders[0].id]: true });
