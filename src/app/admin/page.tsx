@@ -101,7 +101,7 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6 font-sans">
-      {/* Header mit Navigations-Buttons */}
+      {/* Header mit erweiterter Navigation */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border shadow-sm">
         <div>
           <h1 className="text-2xl font-black text-gray-900">Admin - Dashboard</h1>
@@ -123,6 +123,13 @@ export default function AdminPage() {
             className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
           >
             <span>🕒</span> Bestellfenster
+          </Link>
+
+          <Link
+            href="/admin/supplier"
+            className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+          >
+            <span>📋</span> Packlisten & Abholzettel
           </Link>
 
           <Link
