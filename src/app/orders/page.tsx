@@ -79,7 +79,6 @@ export default function CustomerOrdersPage() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
     }).format(date);
   };
 
@@ -109,9 +108,13 @@ export default function CustomerOrdersPage() {
             const isExpanded = !!expandedOrders[order.id];
             const payment = order.paymentStatus || 'offen';
             const status = order.status || 'eingegangen';
+            
+            const totalItemsCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+            const positionsCount = order.items?.length || 0;
 
             return (
               <div key={order.id} className="bg-white border rounded-xl shadow-sm overflow-hidden">
+                {/* Eingeklappte Hauptansicht: Datum, Gesamtsumme, Positionen/Artikel */}
                 <div 
                   onClick={() => toggleExpand(order.id)}
                   className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-gray-50 transition"
@@ -121,14 +124,9 @@ export default function CustomerOrdersPage() {
                       {isExpanded ? '▼' : '▶'}
                     </span>
                     <div>
-                      <span className="text-xs text-gray-400 font-mono block">BESTELL-ID</span>
-                      <span className="font-bold text-sm text-gray-800">{order.id}</span>
+                      <span className="text-xs text-gray-400 font-mono block">DATUM & UHRZEIT</span>
+                      <span className="font-bold text-sm text-gray-800">{formatDate(order.createdAt)}</span>
                     </div>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-gray-400 font-mono block">DATUM & UHRZEIT</span>
-                    <span className="text-sm font-medium">{formatDate(order.createdAt)}</span>
                   </div>
 
                   <div>
@@ -136,48 +134,72 @@ export default function CustomerOrdersPage() {
                     <span className="text-sm font-bold text-blue-600">
                       {order.totalAmount?.toFixed(2)} €
                     </span>
-                    <span className="text-xs text-gray-400 block">
-                      ({order.items?.length || 0} Art.)
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-gray-400 font-mono block">UMFANG</span>
+                    <span className="text-sm font-medium text-gray-700">
+                      {positionsCount} Position{positionsCount === 1 ? '' : 'en'} ({totalItemsCount} Artikel)
                     </span>
                   </div>
 
-                  <div className="flex gap-2">
-                    <div>
-                      <span className="text-xs text-gray-400 font-mono block">STATUS</span>
-                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-blue-200 capitalize">
-                        {status}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-xs text-gray-400 font-mono block">BEZAHLUNG</span>
-                      <span className="inline-block bg-amber-50 text-amber-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200 capitalize">
-                        {payment}
-                      </span>
-                    </div>
+                  <div className="text-xs text-blue-600 font-medium">
+                    {isDetailsVisibleText(isExpanded)}
                   </div>
                 </div>
 
+                {/* Ausgeklappte Detailansicht: Bestell-ID, Artikel, Einzelpreise, Gesamtpreise, Status */}
                 {isExpanded && (
-                  <div className="border-t bg-gray-50/50 p-4 sm:p-6 space-y-3">
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      Bestellte Artikel
-                    </h4>
-                    <div className="bg-white border rounded-lg divide-y">
-                      {order.items?.map((item, idx) => (
-                        <div key={idx} className="p-3 flex justify-between items-center text-sm">
-                          <div>
-                            <span className="font-semibold block">{item.name}</span>
-                            <span className="text-xs text-gray-500">
-                              {item.size ? `Größe: ${item.size}` : ''}
-                              {item.size && item.color ? ' | ' : ''}
-                              {item.color ? `Farbe: ${item.color}` : ''}
-                            </span>
-                          </div>
-                          <span className="font-bold">
-                            {item.quantity}x {item.price?.toFixed(2)} €
+                  <div className="border-t bg-gray-50/50 p-4 sm:p-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-lg border">
+                      <div>
+                        <span className="text-xs text-gray-400 font-mono block">BESTELL-ID</span>
+                        <span className="font-mono text-xs text-gray-700 font-bold">{order.id}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <div>
+                          <span className="text-xs text-gray-400 font-mono block mb-1">STATUS</span>
+                          <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-blue-200 capitalize">
+                            {status}
                           </span>
                         </div>
-                      ))}
+                        <div>
+                          <span className="text-xs text-gray-400 font-mono block mb-1">BEZAHLUNG</span>
+                          <span className="inline-block bg-amber-50 text-amber-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200 capitalize">
+                            {payment}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                        Bestellte Artikel
+                      </h4>
+                      <div className="bg-white border rounded-lg divide-y">
+                        {order.items?.map((item, idx) => {
+                          const itemTotal = (item.price || 0) * (item.quantity || 1);
+                          return (
+                            <div key={idx} className="p-3 flex justify-between items-center text-sm">
+                              <div>
+                                <span className="font-semibold block">{item.name}</span>
+                                <span className="text-xs text-gray-500">
+                                  {item.size ? `Größe: ${item.size}` : ''}
+                                  {item.size && item.color ? ' | ' : ''}
+                                  {item.color ? `Farbe: ${item.color}` : ''}
+                                  {!item.size && !item.color ? 'Standard' : ''}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold block">{itemTotal.toFixed(2)} €</span>
+                                <span className="text-xs text-gray-400">
+                                  {item.quantity}x à {item.price?.toFixed(2)} €
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -188,4 +210,8 @@ export default function CustomerOrdersPage() {
       )}
     </div>
   );
+}
+
+function isDetailsVisibleText(isExpanded: boolean) {
+  return isExpanded ? 'Details verbergen' : 'Details anzeigen';
 }
