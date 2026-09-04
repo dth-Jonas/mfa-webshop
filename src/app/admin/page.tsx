@@ -37,8 +37,6 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  
-  // State für ausklappbare Bestellungen (Set der geöffneten Order-IDs)
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -103,16 +101,37 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6 font-sans">
+      {/* Header mit Navigations-Buttons */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-gray-900">Admin - Bestellübersicht</h1>
+          <h1 className="text-2xl font-black text-gray-900">Admin - Dashboard</h1>
           <p className="text-xs text-gray-500 mt-1">
             Gesamt: {orders.length} Bestellung(en)
           </p>
         </div>
-        <Link href="/" className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-xl transition-all">
-          ← Zum Shop
-        </Link>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+          <Link
+            href="/admin/products"
+            className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+          >
+            <span>🏷️</span> Produkte verwalten
+          </Link>
+
+          <Link
+            href="/admin/windows"
+            className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
+          >
+            <span>🕒</span> Bestellfenster
+          </Link>
+
+          <Link
+            href="/"
+            className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5 ml-auto md:ml-2"
+          >
+            ← Zum Shop
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -130,13 +149,15 @@ export default function AdminPage() {
 
             return (
               <div key={order.id} className="bg-white rounded-3xl border shadow-sm transition-all overflow-hidden">
-                {/* Header-Zeile (Klickbar zum Auf-/Zuklappen) */}
                 <div
                   onClick={() => toggleOrder(order.id)}
                   className="p-6 cursor-pointer hover:bg-gray-50/80 transition-colors flex flex-wrap justify-between items-center gap-4 select-none"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 font-bold transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    <span
+                      className="text-xs text-gray-400 font-bold transition-transform duration-200"
+                      style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                    >
                       ▶
                     </span>
                     <div>
@@ -160,10 +181,12 @@ export default function AdminPage() {
 
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Gesamtsumme</span>
-                    <p className="text-sm font-black text-blue-600 mt-0.5">{order.totalAmount?.toFixed(2)} € <span className="text-[10px] text-gray-400 font-normal">({itemCount} Art.)</span></p>
+                    <p className="text-sm font-black text-blue-600 mt-0.5">
+                      {order.totalAmount?.toFixed(2)} €{' '}
+                      <span className="text-[10px] text-gray-400 font-normal">({itemCount} Art.)</span>
+                    </p>
                   </div>
 
-                  {/* Dropdown stoppt Event-Propagation, damit das Klicken den Bereich nicht unabsichtlich einklappt */}
                   <div className="min-w-[170px]" onClick={(e) => e.stopPropagation()}>
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                       Zahlungsstatus
@@ -185,7 +208,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Ausklappbarer Bereich mit Details & Artikelliste */}
                 {isExpanded && (
                   <div className="border-t bg-gray-50/50 p-6 space-y-4">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
