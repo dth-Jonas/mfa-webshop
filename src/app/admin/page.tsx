@@ -1,8 +1,30 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../lib/auth';
 import Link from 'next/link';
 
 export default function AdminDashboardPage() {
+  const { user, isAdmin, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!user || !isAdmin) {
+        router.push('/');
+      }
+    }
+  }, [user, isAdmin, loading, router]);
+
+  if (loading || !user || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center p-4">
+        <p className="text-xs text-gray-400 font-semibold">Zugriff wird überprüft...</p>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-50/50 p-4 sm:p-8 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
       <div className="max-w-5xl mx-auto space-y-6">
