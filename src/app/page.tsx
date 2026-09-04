@@ -24,6 +24,17 @@ interface Product {
   variantPrices?: VariantPrice[];
 }
 
+interface CartItem {
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  size?: string;
+  color?: string;
+  image?: string;
+  quantity: number;
+}
+
 export default function HomePage() {
   const { user, loginWithGoogle, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -35,8 +46,13 @@ export default function HomePage() {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
 
+  // Cart & Feedback Notification
+  const [cartCount, setCartCount] = useState<number>(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   useEffect(() => {
     fetchProducts();
+    updateCartCount();
   }, []);
 
   useEffect(() => {
@@ -81,6 +97,16 @@ export default function HomePage() {
     }
   }
 
+  const updateCartCount = () => {
+    try {
+      const existingCart: CartItem[] = JSON.parse(localStorage.getItem('mfa_cart') || '[]');
+      const total = existingCart.reduce((sum, item) => sum + item.quantity, 0);
+      setCartCount(total);
+    } catch (e) {
+      console.error('Fehler beim Lesen des Warenkorbs:', e);
+    }
+  };
+
   const handleOpenDetails = (p: Product) => {
     setSelectedProduct(p);
     setSelectedSize(p.sizes && p.sizes.length > 0 ? p.sizes[0] : '');
@@ -97,8 +123,53 @@ export default function HomePage() {
     return p.price;
   };
 
+  const handleAddToCart = () => {
+    if (!selectedProduct) return;
+
+    const finalPrice = getCalculatedPrice(selectedProduct, selectedSize, selectedColor);
+    const existingCart: CartItem[] = JSON.parse(localStorage.getItem('mfa_cart') || '[]');
+
+    const cartItemId = `${selectedProduct.id}_${selectedSize || 'default'}_${selectedColor || 'default'}`;
+    const existingIndex = existingCart.findIndex((item) => item.id === cartItemId);
+
+    if (existingIndex > -1) {
+      existingCart[existingIndex].quantity += 1;
+    } else {
+      existingCart.push({
+        id: cartItemId,
+        productId: selectedProduct.id,
+        name: selectedProduct.name,
+        price: finalPrice,
+        size: selectedSize || undefined,
+        color: selectedColor || undefined,
+        image: selectedProduct.images && selectedProduct.images[0] ? selectedProduct.images[0] : undefined,
+        quantity: 1,
+      });
+    }
+
+    localStorage.setItem('mfa_cart', JSON.stringify(existingCart));
+    updateCartCount();
+
+    // Trigger Toast Notification (Apple-Style)
+    setToastMessage(`"${selectedProduct.name}" zum Warenkorb hinzugefügt`);
+    setSelectedProduct(null);
+
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  };
+
   return (
-    <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+    <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] relative">
+      
+      {/* Apple Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg border border-white/10 animate-fade-in flex items-center gap-2">
+          <span>🛒</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
         
         {/* Header Card */}
@@ -108,7 +179,7 @@ export default function HomePage() {
             <OrderWindowBanner />
           </div>
 
-          {/* User Auth Section */}
+          {/* User Auth & Action Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100 text-xs">
             {user ? (
               <div className="flex items-center gap-2">
@@ -146,15 +217,21 @@ export default function HomePage() {
               )}
               <Link
                 href="/cart"
-                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-xs flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-xs flex items-center gap-2 relative"
               >
-                <span>🛒</span> Warenkorb
+                <span>🛒</span>
+                <span>Warenkorb</span>
+                {cartCount > 0 && (
+                  <span className="bg-white text-blue-600 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center ml-0.5">
+                    {cartCount}
+                  </span>
+                )}
               </Link>
             </div>
           </div>
         </header>
 
-        {/* zweispaltige Produktliste im Mobile-Grid (grid-cols-2) */}
+        {/* 2-Spalten Grid auf Mobile */}
         {loadingProducts ? (
           <div className="py-12 text-center text-xs text-gray-400">Produkte werden geladen...</div>
         ) : (
@@ -219,7 +296,7 @@ export default function HomePage() {
                 <p className="text-xs text-gray-500">{selectedProduct.description}</p>
               )}
 
-              {/* Größen Auswahl */}
+              {/* Größen-Auswahl */}
               {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
                 <div>
                   <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Größe</label>
@@ -241,7 +318,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* Farben Auswahl */}
+              {/* Farben-Auswahl */}
               {selectedProduct.colors && selectedProduct.colors.length > 0 && (
                 <div>
                   <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Farbe</label>
@@ -269,10 +346,7 @@ export default function HomePage() {
                 </span>
                 <button
                   disabled={!isWindowActive}
-                  onClick={() => {
-                    alert('Produkt zum Warenkorb hinzugefügt!');
-                    setSelectedProduct(null);
-                  }}
+                  onClick={handleAddToCart}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                     isWindowActive
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
