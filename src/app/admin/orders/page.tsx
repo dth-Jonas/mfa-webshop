@@ -1,64 +1,241 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../../lib/auth';
+import { useEffect, useState } from 'react';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import AdminOrdersList from '../../../components/admin/AdminOrdersList';
+import Link from 'next/link';
+import ClearOrdersButton from './clear-button';
+
+interface OrderItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  size?: string;
+  color?: string;
+}
+
+interface Order {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  createdAt: any;
+  items: OrderItem[];
+  totalAmount: number;
+  status?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+}
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchOrders = async () => {
-    try {
-      const querySnapshot = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
-      const fetchedOrders = querySnapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      setOrders(fetchedOrders);
-    } catch (error) {
-      console.error('Fehler beim Laden der Bestellungen:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { user, isAdmin, loading: authLoading } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    async function fetchAllOrders() {
+      if (!user || !isAdmin) return;
+      try {
+        const querySnapshot = await getDocs(collection(db, 'orders'));
+        const fetchedOrders = querySnapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        })) as Order[];
 
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!confirm('Möchtest du diese Bestellung wirklich löschen?')) return;
-    try {
-      await deleteDoc(doc(db, 'orders', orderId));
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    } catch (error) {
-      console.error('Fehler beim Löschen:', error);
+        // Sortierung direkt client-seitig (neueste zuerst)
+        fetchedOrders.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        setOrders(fetchedOrders);
+      } catch (error) {
+        console.error('Fehler beim Laden aller Bestellungen:', error);
+      } finally {
+        setFetching(false);
+      }
     }
-  };
 
-  const handleStatusChange = async (orderId: string, field: string, value: string) => {
+    if (!authLoading) {
+      fetchAllOrders();
+    }
+  }, [user, isAdmin, authLoading]);
+
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), { [field]: value });
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, { status: newStatus });
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, [field]: value } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
       );
     } catch (error) {
-      console.error('Fehler beim Aktualisieren:', error);
+      console.error('Fehler beim Aktualisieren des Status:', error);
+      alert('Fehler beim Speichern des Status.');
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Lade Bestellungen...</div>;
+  const updatePaymentStatus = async (orderId: string, newPaymentStatus: string) => {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, { paymentStatus: newPaymentStatus });
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o))
+      );
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren des Zahlungsstatus:', error);
+      alert('Fehler beim Speichern des Zahlungsstatus.');
+    }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '-';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return new Intl.DateTimeFormat('de-DE', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
+
+  if (authLoading || fetching) {
+    return <div className="p-8 text-center">Lade Admin-Bestellungen...</div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="p-8 text-center text-red-600 font-bold">
+        Zugriff verweigert. Nur für Administratoren.
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Bestellverwaltung</h1>
-      <AdminOrdersList
-        orders={orders}
-        onDeleteOrder={handleDeleteOrder}
-        onStatusChange={handleStatusChange}
-      />
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Bestellverwaltung (Admin)</h1>
+          <p className="text-sm text-gray-500">Übersicht aller Kundenbestellungen</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <ClearOrdersButton />
+          <Link href="/admin" className="text-sm text-gray-600 hover:text-black">
+            ← Zurück zum Admin-Dashboard
+          </Link>
+        </div>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="bg-white p-8 text-center rounded-xl border">
+          <p className="text-gray-500">Keine Bestellungen vorhanden.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => {
+            const isExpanded = !!expandedOrders[order.id];
+            const currentStatus = order.status || 'Eingegangen';
+            const currentPayment = order.paymentStatus || 'offen';
+
+            return (
+              <div key={order.id} className="bg-white border rounded-xl shadow-sm overflow-hidden">
+                <div 
+                  className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-gray-50 transition"
+                  onClick={() => toggleExpand(order.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-blue-600 text-xs">
+                      {isExpanded ? '▼' : '▶'}
+                    </span>
+                    <div>
+                      <span className="text-xs text-gray-400 font-mono block">KUNDE / ID</span>
+                      <span className="font-bold text-sm text-gray-800 block">{order.userEmail || order.userId}</span>
+                      <span className="text-xs text-gray-500 font-mono">{order.id}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-gray-400 font-mono block">DATUM</span>
+                    <span className="text-sm font-medium">{formatDate(order.createdAt)}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-gray-400 font-mono block">SUMME</span>
+                    <span className="text-sm font-bold text-blue-600">
+                      {order.totalAmount?.toFixed(2)} €
+                    </span>
+                    <span className="text-xs text-gray-400 block">
+                      ({order.items?.length || 0} Artikel)
+                    </span>
+                  </div>
+
+                  {/* Interaktive Selects für Admin */}
+                  <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div>
+                      <span className="text-xs text-gray-400 font-mono block mb-1">STATUS</span>
+                      <select
+                        value={currentStatus}
+                        onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        className="text-xs border rounded p-1 bg-white font-semibold text-blue-700"
+                      >
+                        <option value="Eingegangen">Eingegangen</option>
+                        <option value="In Bearbeitung">In Bearbeitung</option>
+                        <option value="Bestellt beim Lieferanten">Bestellt beim Lieferanten</option>
+                        <option value="Abholbereit">Abholbereit</option>
+                        <option value="Abgeschlossen">Abgeschlossen</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-gray-400 font-mono block mb-1">BEZAHLUNG</span>
+                      <select
+                        value={currentPayment}
+                        onChange={(e) => updatePaymentStatus(order.id, e.target.value)}
+                        className="text-xs border rounded p-1 bg-white font-semibold text-amber-700 uppercase"
+                      >
+                        <option value="offen">Offen</option>
+                        <option value="bezahlt">Bezahlt</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="border-t bg-gray-50/50 p-4 sm:p-6 space-y-3">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      Bestellte Artikel
+                    </h4>
+                    <div className="bg-white border rounded-lg divide-y">
+                      {order.items?.map((item, idx) => (
+                        <div key={idx} className="p-3 flex justify-between items-center text-sm">
+                          <div>
+                            <span className="font-semibold block">{item.name}</span>
+                            <span className="text-xs text-gray-500">
+                              {item.size ? `Größe: ${item.size}` : ''}
+                              {item.size && item.color ? ' | ' : ''}
+                              {item.color ? `Farbe: ${item.color}` : ''}
+                            </span>
+                          </div>
+                          <span className="font-bold">
+                            {item.quantity}x {item.price?.toFixed(2)} €
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
