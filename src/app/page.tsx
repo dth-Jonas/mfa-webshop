@@ -53,6 +53,10 @@ export default function HomePage() {
   useEffect(() => {
     fetchProducts();
     updateCartCount();
+
+    const handleCartSync = () => updateCartCount();
+    window.addEventListener('cart-updated', handleCartSync);
+    return () => window.removeEventListener('cart-updated', handleCartSync);
   }, []);
 
   useEffect(() => {
@@ -148,9 +152,9 @@ export default function HomePage() {
     }
 
     localStorage.setItem('mfa_cart', JSON.stringify(existingCart));
+    window.dispatchEvent(new Event('cart-updated'));
     updateCartCount();
 
-    // Trigger Toast Notification (Apple-Style)
     setToastMessage(`"${selectedProduct.name}" zum Warenkorb hinzugefügt`);
     setSelectedProduct(null);
 
@@ -162,9 +166,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] relative">
       
-      {/* Apple Toast Notification */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg border border-white/10 animate-fade-in flex items-center gap-2">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg border border-white/10 flex items-center gap-2">
           <span>🛒</span>
           <span>{toastMessage}</span>
         </div>
@@ -179,7 +183,7 @@ export default function HomePage() {
             <OrderWindowBanner />
           </div>
 
-          {/* User Auth & Action Bar */}
+          {/* User Auth Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100 text-xs">
             {user ? (
               <div className="flex items-center gap-2">
@@ -296,7 +300,6 @@ export default function HomePage() {
                 <p className="text-xs text-gray-500">{selectedProduct.description}</p>
               )}
 
-              {/* Größen-Auswahl */}
               {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
                 <div>
                   <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Größe</label>
@@ -318,7 +321,6 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* Farben-Auswahl */}
               {selectedProduct.colors && selectedProduct.colors.length > 0 && (
                 <div>
                   <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Farbe</label>
