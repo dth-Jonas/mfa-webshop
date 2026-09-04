@@ -119,7 +119,7 @@ export default function AdminPage() {
           </Link>
 
           <Link
-            href="/admin/windows"
+            href="/admin/order-windows"
             className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
           >
             <span>🕒</span> Bestellfenster
