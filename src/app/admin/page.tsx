@@ -128,7 +128,7 @@ export default function AdminPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display',sans-serif] selection:bg-blue-500 selection:text-white space-y-8">
       
-      {/* Apple-style Top Bar & Title */}
+      {/* Top Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/80 pb-6">
         <div>
           <div className="flex items-center gap-2">
@@ -160,7 +160,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* iPad / Desktop Dashboard Widgets (Apple Metric Cards) */}
+      {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
@@ -190,9 +190,68 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Filter & Suche im Segmented Control & Search-Bar Design */}
+      {/* Navigations-Kacheln zu den Admin-Unterseiten */}
+      <div>
+        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+          Verwaltungsbereiche
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link
+            href="/admin/products"
+            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
+          >
+            <div className="text-2xl mb-2">📦</div>
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              Produkte
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Produkte anlegen, Preise & Varianten bearbeiten
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/order-windows"
+            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
+          >
+            <div className="text-2xl mb-2">📅</div>
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              Bestellfenster
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Zeiträume für Kundenbestellungen verwalten
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/orders"
+            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
+          >
+            <div className="text-2xl mb-2">📋</div>
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              Bestellliste
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Kompakte Übersicht aller eingegangenen Aufträge
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/supplier"
+            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
+          >
+            <div className="text-2xl mb-2">🚚</div>
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              Lieferanten
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Sammelbestellung & Mengenauswertung exportieren
+            </p>
+          </Link>
+        </div>
+      </div>
+
+      {/* Suche & Status Filter */}
       <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-xs space-y-4 md:space-y-0 md:flex md:items-center md:justify-between md:gap-4">
-        {/* Suchfeld */}
         <div className="relative flex-1">
           <input
             type="text"
@@ -204,7 +263,6 @@ export default function AdminPage() {
           <span className="absolute left-3.5 top-3 text-gray-400 text-sm">🔍</span>
         </div>
 
-        {/* Status Segmented Filter */}
         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
           {[
             { id: 'all', label: 'Alle' },
@@ -228,7 +286,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Orders List / Table for Desktop & Tablet */}
+      {/* Bestellungs-Liste */}
       <div className="space-y-4">
         {filteredOrders.length === 0 ? (
           <div className="bg-white border border-gray-200/80 rounded-2xl p-12 text-center text-gray-400 shadow-xs">
@@ -245,7 +303,6 @@ export default function AdminPage() {
                 key={order.id} 
                 className="bg-white border border-gray-200/80 rounded-2xl shadow-xs hover:shadow-md transition-all overflow-hidden"
               >
-                {/* Header Row */}
                 <div 
                   onClick={() => toggleExpand(order.id)}
                   className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-gray-50/60 active:bg-gray-100 transition-colors min-h-[52px]"
@@ -285,10 +342,8 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Expanded Management Panel */}
                 {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50/50 p-5 sm:p-6 space-y-6">
-                    {/* Admin Actions Bar (Dropdown Control) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-gray-200/80 shadow-2xs">
                       <div>
                         <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">
@@ -331,7 +386,6 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Order Items Table */}
                     <div>
                       <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
                         Bestellte Positionen
@@ -367,9 +421,8 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* Admin Footer */}
       <footer className="pt-8 border-t border-gray-200/80 text-center text-xs text-gray-400">
-        MFA Webshop Admin Console v1.2.2 • Optimiert für macOS & iPadOS
+        MFA Webshop Admin Console v1.2.4 • Optimiert für macOS & iPadOS
       </footer>
     </div>
   );
