@@ -1,8 +1,7 @@
 'use client';
 
-import { useAuth } from '../../lib/auth';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import Link from 'next/link';
 
@@ -11,419 +10,168 @@ interface OrderItem {
   name: string;
   price: number;
   quantity: number;
-  size?: string;
-  color?: string;
 }
 
 interface Order {
   id: string;
-  userId: string;
-  userEmail?: string;
+  userName: string;
+  userEmail: string;
+  totalAmount: number;
+  status: string;
   createdAt: any;
   items: OrderItem[];
-  totalAmount: number;
-  status?: string;
-  paymentStatus?: string;
 }
 
-export default function AdminPage() {
-  const { user, loading } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [fetching, setFetching] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+export default function AdminDashboardPage() {
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [totalOrdersCount, setTotalOrdersCount] = useState<number>(0);
+  const [productsCount, setProductsCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchAllOrders() {
-      try {
-        const snapshot = await getDocs(collection(db, 'orders'));
-        const fetchedOrders = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Order[];
+    // Top 5 aktuellste Bestellungen laden
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Order[];
+      setRecentOrders(list);
+      setLoading(false);
+    });
 
-        fetchedOrders.sort((a, b) => {
-          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
-          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
-          return dateB.getTime() - dateA.getTime();
-        });
+    fetchStats();
 
-        setOrders(fetchedOrders);
-      } catch (error) {
-        console.error('Fehler beim Laden der Admin-Bestellungen:', error);
-      } finally {
-        setFetching(false);
-      }
-    }
+    return () => unsubscribe();
+  }, []);
 
-    if (!loading && user) {
-      fetchAllOrders();
-    }
-  }, [user, loading]);
-
-  const toggleExpand = (id: string) => {
-    setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleStatusChange = async (orderId: string, field: 'status' | 'paymentStatus', value: string) => {
+  async function fetchStats() {
     try {
-      const orderRef = doc(db, 'orders', orderId);
-      await updateDoc(orderRef, { [field]: value });
+      const ordersSnap = await getDocs(collection(db, 'orders'));
+      setTotalOrdersCount(ordersSnap.size);
 
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, [field]: value } : o))
-      );
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Status:', error);
-      alert('Status konnte nicht aktualisiert werden.');
+      const productsSnap = await getDocs(collection(db, 'products'));
+      setProductsCount(productsSnap.size);
+    } catch (err) {
+      console.error('Fehler beim Laden der Statistiken:', err);
     }
-  };
-
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!confirm('Möchtest du diese Bestellung wirklich löschen?')) return;
-    try {
-      await deleteDoc(doc(db, 'orders', orderId));
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('Bestellung konnte nicht gelöscht werden.');
-    }
-  };
-
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return '-';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return new Intl.DateTimeFormat('de-DE', {
-      day: 'numeric',
-      month: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  };
-
-  const filteredOrders = orders.filter((o) => {
-    const matchesSearch =
-      o.id.toLowerCase().includes(search.toLowerCase()) ||
-      (o.userEmail && o.userEmail.toLowerCase().includes(search.toLowerCase()));
-    
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (o.status || 'eingegangen') === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-
-  if (loading || fetching) {
-    return (
-      <div className="min-h-[70vh] flex items-center justify-center text-gray-400 font-medium text-sm">
-        Admin Dashboard wird geladen...
-      </div>
-    );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display',sans-serif] selection:bg-blue-500 selection:text-white space-y-8">
-      
-      {/* Top Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/80 pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
-              Admin Control Center
-            </h1>
-            <span className="bg-blue-100 text-blue-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
-              macOS / iPadOS
-            </span>
+    <main className="min-h-screen bg-gray-50/50 p-4 sm:p-8 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+      <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* Header Bar */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Admin Control Center</h1>
+            <p className="text-xs text-gray-400">Schnellübersicht & Shop-Verwaltung</p>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Verwaltung aller eingehenden Bestellungen & System-Status
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link 
-            href="/orders" 
-            className="inline-flex items-center justify-center min-h-[44px] px-4 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200/80 active:bg-gray-300 rounded-xl transition-all touch-manipulation"
-          >
-            Kundenansicht
-          </Link>
-          <Link 
-            href="/" 
-            className="inline-flex items-center justify-center min-h-[44px] px-4 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100/80 active:bg-blue-200 rounded-xl transition-all touch-manipulation"
+          <Link
+            href="/"
+            className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all shadow-2xs"
           >
             ← Zum Shop
           </Link>
         </div>
-      </div>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
-            Gesamtbestellungen
-          </span>
-          <span className="text-2xl sm:text-3xl font-extrabold text-gray-900">
-            {orders.length}
-          </span>
-        </div>
-
-        <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
-            Gesamtumsatz
-          </span>
-          <span className="text-2xl sm:text-3xl font-extrabold text-blue-600">
-            {totalRevenue.toFixed(2)} €
-          </span>
-        </div>
-
-        <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
-            Gefilterter Umsatz
-          </span>
-          <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
-            {filteredOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)} €
-          </span>
-        </div>
-      </div>
-
-      {/* Navigations-Kacheln zu den Admin-Unterseiten */}
-      <div>
-        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-          Verwaltungsbereiche
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link
-            href="/admin/products"
-            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
-          >
-            <div className="text-2xl mb-2">📦</div>
-            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
-              Produkte
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Produkte anlegen, Preise & Varianten bearbeiten
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/order-windows"
-            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
-          >
-            <div className="text-2xl mb-2">📅</div>
-            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
-              Bestellfenster
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Zeiträume für Kundenbestellungen verwalten
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/orders"
-            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
-          >
-            <div className="text-2xl mb-2">📋</div>
-            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
-              Bestellliste
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Kompakte Übersicht aller eingegangenen Aufträge
-            </p>
-          </Link>
-
-          <Link
-            href="/admin/supplier"
-            className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md active:scale-[0.99] transition-all group"
-          >
-            <div className="text-2xl mb-2">🚚</div>
-            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
-              Lieferanten
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Sammelbestellung & Mengenauswertung exportieren
-            </p>
-          </Link>
-        </div>
-      </div>
-
-      {/* Suche & Status Filter */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-xs space-y-4 md:space-y-0 md:flex md:items-center md:justify-between md:gap-4">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder="Suche nach E-Mail oder Bestell-ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full min-h-[44px] pl-10 pr-4 text-xs sm:text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-          />
-          <span className="absolute left-3.5 top-3 text-gray-400 text-sm">🔍</span>
-        </div>
-
-        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-          {[
-            { id: 'all', label: 'Alle' },
-            { id: 'eingegangen', label: 'Eingegangen' },
-            { id: 'in_bearbeitung', label: 'In Bearbeitung' },
-            { id: 'abgeschlossen', label: 'Abgeschlossen' },
-            { id: 'storniert', label: 'Storniert' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`min-h-[36px] px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap touch-manipulation ${
-                statusFilter === tab.id
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Bestellungs-Liste */}
-      <div className="space-y-4">
-        {filteredOrders.length === 0 ? (
-          <div className="bg-white border border-gray-200/80 rounded-2xl p-12 text-center text-gray-400 shadow-xs">
-            Keine Bestellungen für die Kriterien gefunden.
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-gray-400 uppercase">Bestellungen Gesamt</span>
+            <p className="text-2xl font-black text-gray-900">{totalOrdersCount}</p>
           </div>
-        ) : (
-          filteredOrders.map((order) => {
-            const isExpanded = !!expandedOrders[order.id];
-            const status = order.status || 'eingegangen';
-            const payment = order.paymentStatus || 'offen';
 
-            return (
-              <div 
-                key={order.id} 
-                className="bg-white border border-gray-200/80 rounded-2xl shadow-xs hover:shadow-md transition-all overflow-hidden"
-              >
-                <div 
-                  onClick={() => toggleExpand(order.id)}
-                  className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-gray-50/60 active:bg-gray-100 transition-colors min-h-[52px]"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs font-bold">
-                      {isExpanded ? '▼' : '▶'}
-                    </div>
-                    <div>
-                      <span className="text-xs sm:text-sm font-bold text-gray-900 block">
-                        {order.userEmail || 'Keine E-Mail'}
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-mono">
-                        {order.id} • {formatDate(order.createdAt)}
-                      </span>
-                    </div>
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-gray-400 uppercase">Produkte im Shop</span>
+            <p className="text-2xl font-black text-gray-900">{productsCount}</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-gray-400 uppercase">Bestellungs-Center</span>
+              <p className="text-xs text-gray-500 font-semibold mt-1">Alle {totalOrdersCount} Bestellungen verwalten</p>
+            </div>
+            <Link
+              href="/admin/orders"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs"
+            >
+              Verwalten →
+            </Link>
+          </div>
+        </div>
+
+        {/* Letzte 5 Bestellungen (Schnellübersicht) */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Letzte 5 Bestellungen</h2>
+              <p className="text-xs text-gray-400">Schnelle Vorschau der neuesten Eingänge</p>
+            </div>
+            <Link
+              href="/admin/orders"
+              className="text-xs font-bold text-blue-600 hover:underline"
+            >
+              Alle Bestellungen anzeigen →
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="py-8 text-center text-xs text-gray-400">Lade Vorschau...</div>
+          ) : recentOrders.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-400">Bisher noch keine Bestellungen eingegangen.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="py-3 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-gray-900">{order.userName || 'Unbekannt'}</p>
+                    <p className="text-[10px] text-gray-400">{order.userEmail}</p>
                   </div>
-
-                  <div className="flex items-center gap-6">
-                    <div>
-                      <span className="text-[10px] uppercase font-semibold text-gray-400 block">Betrag</span>
-                      <span className="text-sm sm:text-base font-bold text-blue-600">
-                        {order.totalAmount?.toFixed(2)} €
-                      </span>
-                    </div>
-
-                    <div className="hidden sm:block">
-                      <span className="text-[10px] uppercase font-semibold text-gray-400 block">Status</span>
-                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-blue-100 capitalize">
-                        {status.replace('_', ' ')}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-blue-600 font-semibold">
-                      {isExpanded ? 'Verbergen' : 'Verwalten'}
-                    </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-extrabold text-gray-900">
+                      {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '0.00 €'}
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        order.status === 'Bezahlt' || order.status === 'Geliefert'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {order.status || 'Offen'}
+                    </span>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-5 sm:p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-gray-200/80 shadow-2xs">
-                      <div>
-                        <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">
-                          Bestellstatus ändern
-                        </label>
-                        <select
-                          value={status}
-                          onChange={(e) => handleStatusChange(order.id, 'status', e.target.value)}
-                          className="w-full min-h-[40px] text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        >
-                          <option value="eingegangen">Eingegangen</option>
-                          <option value="in_bearbeitung">In Bearbeitung</option>
-                          <option value="abgeschlossen">Abgeschlossen</option>
-                          <option value="storniert">Storniert</option>
-                        </select>
-                      </div>
+        {/* Quick Links zu Admin Tools */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Link
+            href="/admin/products"
+            className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs hover:border-gray-300 transition-all block group"
+          >
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              🛍️ Produkte verwalten
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">neue Artikel anlegen, Preise & Varianten anpassen</p>
+          </Link>
 
-                      <div>
-                        <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">
-                          Zahlungsstatus ändern
-                        </label>
-                        <select
-                          value={payment}
-                          onChange={(e) => handleStatusChange(order.id, 'paymentStatus', e.target.value)}
-                          className="w-full min-h-[40px] text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        >
-                          <option value="offen">Offen</option>
-                          <option value="bezahlt">Bezahlt</option>
-                          <option value="rückerstattet">Rückerstattet</option>
-                        </select>
-                      </div>
+          <Link
+            href="/admin/windows"
+            className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs hover:border-gray-300 transition-all block group"
+          >
+            <h3 className="font-bold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+              📅 Bestellfenster einrichten
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">Zeiträume für aktive Bestellphasen definieren</p>
+          </Link>
+        </div>
 
-                      <div className="flex items-end">
-                        <button
-                          onClick={() => handleDeleteOrder(order.id)}
-                          className="w-full min-h-[40px] text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100/80 active:bg-red-200 rounded-lg transition-all"
-                        >
-                          Bestellung löschen
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-                        Bestellte Positionen
-                      </h4>
-                      <div className="bg-white border border-gray-200/80 rounded-xl overflow-hidden divide-y divide-gray-100 shadow-2xs">
-                        {order.items?.map((item, idx) => (
-                          <div key={idx} className="p-3.5 flex justify-between items-center text-xs sm:text-sm">
-                            <div>
-                              <span className="font-semibold text-gray-900 block">{item.name}</span>
-                              <span className="text-[11px] text-gray-500">
-                                {item.size ? `Größe: ${item.size}` : ''}
-                                {item.size && item.color ? ' • ' : ''}
-                                {item.color ? `Farbe: ${item.color}` : ''}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="font-bold text-gray-900 block">
-                                {((item.price || 0) * (item.quantity || 1)).toFixed(2)} €
-                              </span>
-                              <span className="text-[10px] text-gray-400">
-                                {item.quantity}x à {item.price?.toFixed(2)} €
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
       </div>
-
-      <footer className="pt-8 border-t border-gray-200/80 text-center text-xs text-gray-400">
-        MFA Webshop Admin Console v1.2.4 • Optimiert für macOS & iPadOS
-      </footer>
-    </div>
+    </main>
   );
 }
