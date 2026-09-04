@@ -20,6 +20,7 @@ interface Order {
   userEmail: string;
   totalAmount: number;
   status: string;
+  paymentStatus?: string;
   createdAt: any;
   items: OrderItem[];
 }
@@ -31,13 +32,18 @@ export default function AdminOrdersPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
+    // Strikte Datums-Sortierung direkt in der Firestore Query
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       })) as Order[];
       setOrders(list);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore Fehler beim Laden der Admin-Bestellungen:", error);
       setLoading(false);
     });
 
@@ -49,7 +55,14 @@ export default function AdminOrdersPage() {
       await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
     } catch (err) {
       console.error('Fehler beim Aktualisieren des Status:', err);
-      alert('Fehler beim Ändern des Status.');
+    }
+  };
+
+  const handlePaymentStatusChange = async (orderId: string, newPaymentStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { paymentStatus: newPaymentStatus });
+    } catch (err) {
+      console.error('Fehler beim Aktualisieren des Bezahlstatus:', err);
     }
   };
 
@@ -59,7 +72,6 @@ export default function AdminOrdersPage() {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (err) {
       console.error('Fehler beim Löschen:', err);
-      alert('Fehler beim Löschen der Bestellung.');
     }
   };
 
@@ -107,7 +119,7 @@ export default function AdminOrdersPage() {
           />
 
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-            {['Alle', 'Offen', 'In Bearbeitung', 'Bezahlt', 'Geliefert', 'Storniert'].map((s) => (
+            {['Alle', 'Eingegangen', 'In Bearbeitung', 'Ausgeliefert', 'Abgeschlossen', 'Storniert'].map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -123,7 +135,7 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        {/* Orders Table / Cards */}
+        {/* Orders Table */}
         {loading ? (
           <div className="bg-white rounded-3xl p-12 text-center text-xs text-gray-400 border border-gray-200/80">
             Lade Bestellungen...
@@ -141,7 +153,6 @@ export default function AdminOrdersPage() {
                 key={order.id}
                 className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-xs space-y-4 transition-all hover:border-gray-300"
               >
-                {/* Header Info */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -151,27 +162,45 @@ export default function AdminOrdersPage() {
                     <p className="text-xs text-gray-400">{order.userEmail}</p>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-black text-gray-900">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-black text-gray-900 mr-2">
                       {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '0.00 €'}
                     </span>
 
                     {/* Status Dropdown */}
-                    <select
-                      value={order.status || 'Offen'}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      className="text-xs font-bold px-3 py-1.5 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    >
-                      <option value="Offen">Offen</option>
-                      <option value="In Bearbeitung">In Bearbeitung</option>
-                      <option value="Bezahlt">Bezahlt</option>
-                      <option value="Geliefert">Geliefert</option>
-                      <option value="Storniert">Storniert</option>
-                    </select>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">Status:</span>
+                      <select
+                        value={order.status || 'Eingegangen'}
+                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                        className="text-xs font-bold px-2.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        <option value="Eingegangen">Eingegangen</option>
+                        <option value="In Bearbeitung">In Bearbeitung</option>
+                        <option value="Ausgeliefert">Ausgeliefert</option>
+                        <option value="Abgeschlossen">Abgeschlossen</option>
+                        <option value="Storniert">Storniert</option>
+                      </select>
+                    </div>
+
+                    {/* Payment Status Dropdown */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">Bezahlung:</span>
+                      <select
+                        value={order.paymentStatus || 'Offen'}
+                        onChange={(e) => handlePaymentStatusChange(order.id, e.target.value)}
+                        className="text-xs font-bold px-2.5 py-1.5 rounded-xl border border-gray-200 bg-amber-50/50 border-amber-200 text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      >
+                        <option value="Offen">Offen</option>
+                        <option value="Bar">Bar</option>
+                        <option value="PayPal">PayPal</option>
+                        <option value="Überweisung">Überweisung</option>
+                      </select>
+                    </div>
 
                     <button
                       onClick={() => handleDeleteOrder(order.id)}
-                      className="text-gray-400 hover:text-red-600 font-bold text-xs p-1"
+                      className="text-gray-400 hover:text-red-600 font-bold text-xs p-1 ml-1"
                       title="Bestellung löschen"
                     >
                       🗑️
@@ -179,7 +208,6 @@ export default function AdminOrdersPage() {
                   </div>
                 </div>
 
-                {/* Items */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                   {order.items?.map((item, idx) => (
                     <div

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/auth';
 import Link from 'next/link';
@@ -36,6 +36,7 @@ export default function UserOrdersPage() {
       return;
     }
 
+    // Strikte Datums-Sortierung nach createdAt
     const q = query(
       collection(db, 'orders'),
       where('userId', '==', user.uid),
@@ -47,7 +48,11 @@ export default function UserOrdersPage() {
         id: doc.id,
         ...doc.data(),
       })) as Order[];
+
       setOrders(list);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore Fehler beim Laden der Kundenbestellungen:", error);
       setLoading(false);
     });
 
@@ -74,7 +79,6 @@ export default function UserOrdersPage() {
     <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
       <div className="max-w-xl mx-auto space-y-4">
         
-        {/* Navigation */}
         <div className="flex items-center justify-between mb-2">
           <Link
             href="/"
@@ -101,7 +105,7 @@ export default function UserOrdersPage() {
         ) : (
           <div className="space-y-3">
             {orders.map((order) => {
-              const isExpanded = expandedOrders[order.id] ?? true; // Standardmäßig geöffnet
+              const isExpanded = expandedOrders[order.id] ?? true;
               const totalItemsCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
               return (
@@ -109,7 +113,6 @@ export default function UserOrdersPage() {
                   key={order.id}
                   className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-xs space-y-3"
                 >
-                  {/* Top Bar: Datum, Gesamtsumme, Umfang & Details Toggle */}
                   <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-100">
                     <div className="flex items-center gap-3">
                       <div>
@@ -138,10 +141,8 @@ export default function UserOrdersPage() {
                     </button>
                   </div>
 
-                  {/* Details Section */}
                   {isExpanded && (
                     <div className="space-y-3 pt-1">
-                      {/* ID, Status & Bezahlung */}
                       <div className="grid grid-cols-3 gap-2 bg-gray-50/70 p-2.5 rounded-xl border border-gray-100 text-xs">
                         <div>
                           <span className="text-[9px] font-bold text-gray-400 uppercase block">Bestell-ID</span>
@@ -165,7 +166,6 @@ export default function UserOrdersPage() {
                         </div>
                       </div>
 
-                      {/* Bestellte Artikel */}
                       <div className="space-y-2">
                         <span className="text-[10px] font-bold text-gray-400 uppercase block">Bestellte Artikel</span>
                         {order.items?.map((item, idx) => (
