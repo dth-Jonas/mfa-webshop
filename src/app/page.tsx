@@ -3,41 +3,42 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useAuth } from '../lib/auth';
 import OrderWindowBanner from '../components/OrderWindowBanner';
+import Link from 'next/link';
+
+interface VariantPrice {
+  size: string;
+  color: string;
+  price: number;
+}
 
 interface Product {
   id: string;
   name: string;
   price: number;
   description?: string;
-  imageUrl?: string;
+  sizes?: string[];
+  colors?: string[];
+  images?: string[];
+  variantPrices?: VariantPrice[];
 }
 
 export default function HomePage() {
+  const { user, loginWithGoogle, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState<boolean>(true);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const [isWindowActive, setIsWindowActive] = useState<boolean>(false);
 
-  // 1. Produkte laden
+  // Detail Modal State
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
+
   useEffect(() => {
-    async function loadProducts() {
-      try {
-        const snap = await getDocs(collection(db, 'products'));
-        const list = snap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Product[];
-        setProducts(list);
-      } catch (err) {
-        console.error('Fehler beim Laden der Produkte:', err);
-      } finally {
-        setProductsLoading(false);
-      }
-    }
-    loadProducts();
+    fetchProducts();
   }, []);
 
-  // 2. Bestellfenster-Status prüfen
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, 'orderWindows'),
@@ -62,90 +63,229 @@ export default function HomePage() {
 
         setIsWindowActive(!!activeWin);
       },
-      (error) => {
-        console.error('Firestore Error:', error);
-        setIsWindowActive(false);
-      }
+      () => setIsWindowActive(false)
     );
 
     return () => unsubscribe();
   }, []);
 
+  async function fetchProducts() {
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Product[];
+      setProducts(list);
+    } catch (err) {
+      console.error('Fehler beim Laden der Produkte:', err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }
+
+  const handleOpenDetails = (p: Product) => {
+    setSelectedProduct(p);
+    setSelectedSize(p.sizes && p.sizes.length > 0 ? p.sizes[0] : '');
+    setSelectedColor(p.colors && p.colors.length > 0 ? p.colors[0] : '');
+  };
+
+  const getCalculatedPrice = (p: Product, size: string, color: string) => {
+    if (p.variantPrices && p.variantPrices.length > 0) {
+      const match = p.variantPrices.find(
+        (v) => (v.size === size || v.size === '*') && (v.color === color || v.color === '*')
+      );
+      if (match) return match.price;
+    }
+    return p.price;
+  };
+
   return (
-    <main className="min-h-screen bg-gray-50/50 p-4 sm:p-8 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text',sans-serif]">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
-          <div>
-            <h1 className="text-2xl font-black text-gray-900">MFA Shop</h1>
-            <p className="text-xs text-gray-500 mt-1">Willkommen im Mitarbeiter-Webshop</p>
-          </div>
-          <div>
+    <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+        
+        {/* Header Card */}
+        <header className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">MFA Shop</h1>
             <OrderWindowBanner />
+          </div>
+
+          {/* User Auth Section */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100 text-xs">
+            {user ? (
+              <div className="flex items-center gap-2">
+                {user.photoURL && (
+                  <img src={user.photoURL} alt="Avatar" className="w-7 h-7 rounded-full border border-gray-200" />
+                )}
+                <div>
+                  <p className="font-bold text-gray-900 leading-tight">{user.displayName}</p>
+                  <p className="text-[10px] text-gray-400">{user.email}</p>
+                </div>
+                <button
+                  onClick={logout}
+                  className="ml-2 text-[10px] text-red-500 hover:underline font-semibold"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 transition-all"
+              >
+                <span>🔑</span> Login mit Google
+              </button>
+            )}
+
+            <div className="flex items-center gap-2">
+              {user && (
+                <Link
+                  href="/orders"
+                  className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700 transition-all"
+                >
+                  📦 Meine Bestellungen
+                </Link>
+              )}
+              <Link
+                href="/cart"
+                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <span>🛒</span> Warenkorb
+              </Link>
+            </div>
           </div>
         </header>
 
-        {!isWindowActive && (
-          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
-            <span>⚠️</span>
-            <span>Der Shop ist derzeit für Bestellungen geschlossen. Produkte können angesehen, aber nicht bestellt werden.</span>
+        {/* zweispaltige Produktliste im Mobile-Grid (grid-cols-2) */}
+        {loadingProducts ? (
+          <div className="py-12 text-center text-xs text-gray-400">Produkte werden geladen...</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+            {products.map((p) => (
+              <div
+                key={p.id}
+                className="bg-white rounded-2xl border border-gray-200/80 p-3 sm:p-4 shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-full aspect-square bg-gray-50 rounded-xl overflow-hidden mb-2 sm:mb-3 border border-gray-100 flex items-center justify-center">
+                    {p.images && p.images[0] ? (
+                      <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-3xl">👕</span>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-xs sm:text-sm text-gray-900 line-clamp-1">{p.name}</h3>
+                  {p.description && (
+                    <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5 line-clamp-2">{p.description}</p>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-100">
+                  <p className="font-extrabold text-xs sm:text-sm text-gray-900 mb-2">
+                    {p.price ? `${p.price.toFixed(2)} €` : ''}
+                  </p>
+
+                  <button
+                    onClick={() => handleOpenDetails(p)}
+                    className="w-full min-h-[32px] sm:min-h-[36px] bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold rounded-xl text-[11px] sm:text-xs transition-all flex items-center justify-center gap-1"
+                  >
+                    Details →
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Produkt-Katalog */}
-        <section>
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Produkte</h2>
-
-          {productsLoading ? (
-            <div className="py-12 text-center text-xs text-gray-400">Produkte werden geladen...</div>
-          ) : products.length === 0 ? (
-            <div className="py-12 text-center text-xs text-gray-400 bg-white rounded-2xl border border-gray-200">
-              Keine Produkte gefunden.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((product) => (
-                <div
-                  key={product.id}
-                  className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex flex-col justify-between transition-all hover:shadow-md"
+        {/* Product Details Modal */}
+        {selectedProduct && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-gray-100">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-base text-gray-900">{selectedProduct.name}</h3>
+                <button
+                  onClick={() => setSelectedProduct(null)}
+                  className="text-gray-400 hover:text-gray-600 font-bold text-lg"
                 >
-                  <div>
-                    {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="w-full h-48 object-cover rounded-xl mb-4 bg-gray-50"
-                      />
-                    ) : (
-                      <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-medium mb-4">
-                        Kein Bild
-                      </div>
-                    )}
-                    <h3 className="font-bold text-gray-900 text-sm">{product.name}</h3>
-                    {product.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>
-                    )}
-                  </div>
+                  ×
+                </button>
+              </div>
 
-                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                    <span className="font-extrabold text-sm text-gray-900">
-                      {typeof product.price === 'number' ? `${product.price.toFixed(2)} €` : product.price}
-                    </span>
-                    <button
-                      disabled={!isWindowActive}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                        isWindowActive
-                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {isWindowActive ? 'In den Warenkorb' : 'Geschlossen'}
-                    </button>
+              {selectedProduct.images && selectedProduct.images[0] && (
+                <div className="w-full h-40 bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
+                  <img src={selectedProduct.images[0]} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              {selectedProduct.description && (
+                <p className="text-xs text-gray-500">{selectedProduct.description}</p>
+              )}
+
+              {/* Größen Auswahl */}
+              {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Größe</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedProduct.sizes.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setSelectedSize(s)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                          selectedSize === s
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Farben Auswahl */}
+              {selectedProduct.colors && selectedProduct.colors.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Farbe</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedProduct.colors.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setSelectedColor(c)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                          selectedColor === c
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-between border-t border-gray-100">
+                <span className="text-base font-extrabold text-gray-900">
+                  {getCalculatedPrice(selectedProduct, selectedSize, selectedColor).toFixed(2)} €
+                </span>
+                <button
+                  disabled={!isWindowActive}
+                  onClick={() => {
+                    alert('Produkt zum Warenkorb hinzugefügt!');
+                    setSelectedProduct(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    isWindowActive
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isWindowActive ? 'In den Warenkorb' : 'Geschlossen'}
+                </button>
+              </div>
             </div>
-          )}
-        </section>
+          </div>
+        )}
+
       </div>
     </main>
   );
