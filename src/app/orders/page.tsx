@@ -1,186 +1,177 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/auth';
+import { useEffect, useState } from 'react';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import Link from 'next/link';
 
 interface OrderItem {
-  cartId: string;
+  id: string;
   name: string;
   price: number;
-  size: string;
-  color: string;
   quantity: number;
+  size?: string;
+  color?: string;
 }
 
 interface Order {
   id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
+  createdAt: any;
   items: OrderItem[];
   totalAmount: number;
-  status: string;
+  status?: string;
   paymentStatus?: string;
-  createdAt: any;
+  paymentMethod?: string;
 }
 
-export default function UserOrdersPage() {
-  const { user } = useAuth();
+export default function CustomerOrdersPage() {
+  const { user, loading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!user) {
-      setOrders([]);
-      setLoading(false);
-      return;
+    async function fetchUserOrders() {
+      if (!user) return;
+      try {
+        const q = query(
+          collection(db, 'orders'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const fetchedOrders = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Order[];
+        
+        setOrders(fetchedOrders);
+        if (fetchedOrders.length > 0) {
+          setExpandedOrders({ [fetchedOrders[0].id]: true });
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Bestellungen:', error);
+      } finally {
+        setFetching(false);
+      }
     }
 
-    const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetchedOrders = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Order[];
-
-      fetchedOrders.sort((a, b) => {
-        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return timeB - timeA;
-      });
-
-      setOrders(fetchedOrders);
-      setLoading(false);
-    }, (err) => {
-      console.error("Fehler beim Laden der Bestellungen:", err);
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, [user]);
-
-  const toggleOrder = (orderId: string) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [orderId]: !prev[orderId],
-    }));
-  };
-
-  const getStatusBadgeStyle = (status: string) => {
-    const uppercaseStatus = status.toUpperCase();
-    switch (uppercaseStatus) {
-      case 'BARZAHLUNG':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
-      case 'PAYPAL':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'ÜBERWEISUNG':
-        return 'bg-purple-100 text-purple-800 border-purple-300';
-      default:
-        return 'bg-amber-100 text-amber-800 border-amber-300';
+    if (!loading) {
+      fetchUserOrders();
     }
+  }, [user, loading]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  if (!user) {
-    return (
-      <div className="max-w-xl mx-auto p-8 text-center space-y-4">
-        <p className="text-sm font-bold text-gray-500">Bitte melde dich an, um deine Bestellungen zu sehen.</p>
-        <Link href="/" className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl">
-          Zur Startseite
-        </Link>
-      </div>
-    );
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '-';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return new Intl.DateTimeFormat('de-DE', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).format(date);
+  };
+
+  if (loading || fetching) {
+    return <div className="p-8 text-center">Bestellungen werden geladen...</div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6 font-sans">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-gray-900">Meine Bestellungen</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Eingeloggt als {user.email}</p>
+          <h1 className="text-3xl font-bold">Meine Bestellungen</h1>
+          <p className="text-sm text-gray-500">Eingeloggt als {user?.email}</p>
         </div>
-        <Link href="/" className="text-xs font-bold text-gray-500 hover:text-gray-900">
+        <Link href="/" className="text-sm text-gray-600 hover:text-black">
           ← Zurück zum Shop
         </Link>
       </div>
 
-      {loading ? (
-        <p className="text-xs font-bold text-gray-400">Lade Bestellungen...</p>
-      ) : orders.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border text-center space-y-4">
-          <p className="text-sm font-bold text-gray-400">Du hast bisher noch keine Bestellungen aufgegeben.</p>
-          <Link href="/" className="inline-block bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl">
-            Jetzt shoppen
-          </Link>
+      {orders.length === 0 ? (
+        <div className="bg-white p-8 text-center rounded-xl border">
+          <p className="text-gray-500">Du hast noch keine Bestellungen aufgegeben.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
-            const currentPaymentStatus = order.paymentStatus || order.status || 'OFFEN';
             const isExpanded = !!expandedOrders[order.id];
-            const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+            const payment = order.paymentStatus || order.paymentMethod || 'offen';
+            const status = order.status || 'Eingegangen';
 
             return (
-              <div key={order.id} className="bg-white rounded-3xl border shadow-sm transition-all overflow-hidden">
-                {/* Header-Zeile (Klickbar zum Auf-/Zuklappen) */}
-                <div
-                  onClick={() => toggleOrder(order.id)}
-                  className="p-6 cursor-pointer hover:bg-gray-50/80 transition-colors flex flex-wrap justify-between items-center gap-4 select-none"
+              <div key={order.id} className="bg-white border rounded-xl shadow-sm overflow-hidden">
+                <div 
+                  onClick={() => toggleExpand(order.id)}
+                  className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-gray-50 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 font-bold transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-                      ▶
+                    <span className="text-blue-600 text-xs">
+                      {isExpanded ? '▼' : '▶'}
                     </span>
                     <div>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Bestell-ID</span>
-                      <span className="text-xs font-mono font-bold text-gray-700">{order.id}</span>
+                      <span className="text-xs text-gray-400 font-mono block">BESTELL-ID</span>
+                      <span className="font-bold text-sm text-gray-800">{order.id}</span>
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Datum & Uhrzeit</span>
-                    <span className="text-xs font-bold text-gray-700">
-                      {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString('de-DE') : 'Neu'}
-                    </span>
+                    <span className="text-xs text-gray-400 font-mono block">DATUM & UHRZEIT</span>
+                    <span className="text-sm font-medium">{formatDate(order.createdAt)}</span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Gesamtsumme</span>
-                    <span className="text-sm font-black text-blue-600">
-                      {order.totalAmount?.toFixed(2)} € <span className="text-[10px] text-gray-400 font-normal">({itemCount} Art.)</span>
+                    <span className="text-xs text-gray-400 font-mono block">GESAMTSUMME</span>
+                    <span className="text-sm font-bold text-blue-600">
+                      {order.totalAmount?.toFixed(2)} €
+                    </span>
+                    <span className="text-xs text-gray-400 block">
+                      ({order.items?.length || 0} Art.)
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Zahlungsstatus</span>
-                    <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full border ${getStatusBadgeStyle(currentPaymentStatus)}`}>
-                      {currentPaymentStatus}
-                    </span>
+                  <div className="flex gap-2">
+                    <div>
+                      <span className="text-xs text-gray-400 font-mono block">STATUS</span>
+                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-blue-200">
+                        {status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-400 font-mono block">BEZAHLUNG</span>
+                      <span className="inline-block bg-amber-50 text-amber-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200 uppercase">
+                        {payment}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Ausklappbarer Bereich für Artikel-Details */}
                 {isExpanded && (
-                  <div className="border-t bg-gray-50/50 p-6 space-y-4">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                  <div className="border-t bg-gray-50/50 p-4 sm:p-6 space-y-3">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       Bestellte Artikel
-                    </span>
-                    <div className="divide-y bg-white rounded-2xl border px-4">
+                    </h4>
+                    <div className="bg-white border rounded-lg divide-y">
                       {order.items?.map((item, idx) => (
-                        <div key={idx} className="py-3 flex justify-between items-center text-xs">
+                        <div key={idx} className="p-3 flex justify-between items-center text-sm">
                           <div>
-                            <p className="font-bold text-gray-900">{item.name}</p>
-                            <p className="text-[10px] text-gray-400">
-                              {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
-                            </p>
+                            <span className="font-semibold block">{item.name}</span>
+                            <span className="text-xs text-gray-500">
+                              {item.size ? `Größe: ${item.size}` : ''}
+                              {item.size && item.color ? ' | ' : ''}
+                              {item.color ? `Farbe: ${item.color}` : ''}
+                            </span>
                           </div>
-                          <div className="text-right">
-                            <p className="font-bold text-gray-700">{item.quantity}x {item.price?.toFixed(2)} €</p>
-                          </div>
+                          <span className="font-bold">
+                            {item.quantity}x {item.price?.toFixed(2)} €
+                          </span>
                         </div>
                       ))}
                     </div>
