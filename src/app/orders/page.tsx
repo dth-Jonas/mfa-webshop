@@ -1,9 +1,9 @@
 'use client';
 
-import { useAuth } from '../../lib/auth';
 import { useEffect, useState } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { useAuth } from '../../lib/auth';
 import Link from 'next/link';
 
 interface OrderItem {
@@ -17,234 +17,182 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  totalAmount: number;
+  status: string;
+  paymentStatus?: string;
   createdAt: any;
   items: OrderItem[];
-  totalAmount: number;
-  status?: string;
-  paymentStatus?: string;
 }
 
-export default function CustomerOrdersPage() {
-  const { user, loading } = useAuth();
+export default function UserOrdersPage() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [fetching, setFetching] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    async function fetchUserOrders() {
-      if (!user) return;
-      try {
-        const q = query(
-          collection(db, 'orders'),
-          where('userId', '==', user.uid)
-        );
-        const snapshot = await getDocs(q);
-        const fetchedOrders = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Order[];
-        
-        fetchedOrders.sort((a, b) => {
-          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
-          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
-          return dateB.getTime() - dateA.getTime();
-        });
-
-        setOrders(fetchedOrders);
-        if (fetchedOrders.length > 0) {
-          setExpandedOrders({ [fetchedOrders[0].id]: true });
-        }
-      } catch (error) {
-        console.error('Fehler beim Laden der Bestellungen:', error);
-      } finally {
-        setFetching(false);
-      }
+    if (!user) {
+      setLoading(false);
+      return;
     }
 
-    if (!loading) {
-      fetchUserOrders();
-    }
-  }, [user, loading]);
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Order[];
+      setOrders(list);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const formatDate = (timestamp: any) => {
-    if (!timestamp) return '-';
+    if (!timestamp) return 'Datum unbekannt';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return new Intl.DateTimeFormat('de-DE', {
+    return date.toLocaleDateString('de-DE', {
       day: 'numeric',
       month: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    }).format(date);
+    });
   };
 
-  if (loading || fetching) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center text-gray-400 font-medium text-sm">
-        Bestellungen werden geladen...
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 pb-12 flex flex-col min-h-screen justify-between font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display',sans-serif] selection:bg-blue-500 selection:text-white">
-      <div className="space-y-6">
-        {/* Navigation / Header im iOS Segmented Style */}
-        <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
-              Meine Bestellungen
-            </h1>
-            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[240px] sm:max-w-none">
-              {user?.email}
-            </p>
-          </div>
-          <Link 
-            href="/" 
-            className="inline-flex items-center min-h-[44px] px-3.5 py-2 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 active:bg-blue-100 rounded-full transition-all touch-manipulation focus:outline-none"
+    <main className="min-h-screen bg-gray-50/50 p-3 sm:p-6 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+      <div className="max-w-xl mx-auto space-y-4">
+        
+        {/* Navigation */}
+        <div className="flex items-center justify-between mb-2">
+          <Link
+            href="/"
+            className="inline-flex items-center text-xs font-bold text-gray-600 bg-white hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-xl transition-all shadow-2xs"
           >
-            ← Zurück zum Shop
+            ← Zurück zum Dashboard
           </Link>
         </div>
 
-        {orders.length === 0 ? (
-          <div className="bg-white p-10 text-center rounded-2xl border border-gray-100 shadow-sm space-y-2">
-            <p className="text-gray-900 font-semibold text-base">Keine Bestellungen</p>
-            <p className="text-gray-400 text-xs">Du hast noch keine Bestellungen in deinem Konto hinterlegt.</p>
+        {!user ? (
+          <div className="bg-white rounded-2xl p-6 text-center border border-gray-200/80 shadow-xs">
+            <p className="text-xs font-semibold text-gray-600">Bitte melde dich an, um deine Bestellungen einzusehen.</p>
+          </div>
+        ) : loading ? (
+          <div className="bg-white rounded-2xl p-6 text-center text-xs text-gray-400 border border-gray-200/80">
+            Bestellungen werden geladen...
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center border border-gray-200/80 space-y-2">
+            <span className="text-3xl block">📦</span>
+            <h2 className="font-bold text-gray-900 text-sm">Keine Bestellungen vorhanden</h2>
+            <p className="text-xs text-gray-400">Du hast bisher noch keine Bestellungen aufgegeben.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {orders.map((order) => {
-              const isExpanded = !!expandedOrders[order.id];
-              const payment = order.paymentStatus || 'offen';
-              const status = order.status || 'eingegangen';
-              
+              const isExpanded = expandedOrders[order.id] ?? true; // Standardmäßig geöffnet
               const totalItemsCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-              const positionsCount = order.items?.length || 0;
 
               return (
-                <div 
-                  key={order.id} 
-                  className="bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden [-webkit-tap-highlight-color:transparent]"
+                <div
+                  key={order.id}
+                  className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-xs space-y-3"
                 >
-                  {/* Apple HIG Click Target (Mindestens 44px Höhe, komfortables Spacing) */}
-                  <div 
-                    onClick={() => toggleExpand(order.id)}
-                    className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 cursor-pointer active:bg-gray-50/80 transition-colors touch-manipulation min-h-[44px]"
-                  >
+                  {/* Top Bar: Datum, Gesamtsumme, Umfang & Details Toggle */}
+                  <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-100">
                     <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[10px] font-bold">
-                        {isExpanded ? '▼' : '▶'}
+                      <div>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase block">Datum & Uhrzeit</span>
+                        <span className="font-bold text-gray-800">{formatDate(order.createdAt)}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block">Datum & Uhrzeit</span>
-                        <span className="font-semibold text-xs sm:text-sm text-gray-900">{formatDate(order.createdAt)}</span>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase block">Gesamtsumme</span>
+                        <span className="font-black text-blue-600">
+                          {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '0.00 €'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase block">Umfang</span>
+                        <span className="text-gray-600 font-medium">
+                          {order.items?.length || 0} Pos. ({totalItemsCount} Art.)
+                        </span>
                       </div>
                     </div>
 
-                    <div>
-                      <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block">Gesamtsumme</span>
-                      <span className="text-sm sm:text-base font-bold text-blue-600">
-                        {order.totalAmount?.toFixed(2)} €
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block">Umfang</span>
-                      <span className="text-xs font-medium text-gray-600">
-                        {positionsCount} Pos. ({totalItemsCount} Art.)
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-blue-600 font-semibold ml-auto sm:ml-0">
+                    <button
+                      onClick={() => toggleExpand(order.id)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                    >
                       {isExpanded ? 'Verbergen' : 'Details'}
-                    </div>
+                    </button>
                   </div>
 
-                  {/* Ausgeklappte iOS Card Section */}
+                  {/* Details Section */}
                   {isExpanded && (
-                    <div className="border-t border-gray-100 bg-gray-50/60 p-4 sm:p-5 space-y-4">
-                      {/* Meta Information Bar */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-gray-100 shadow-2xs">
+                    <div className="space-y-3 pt-1">
+                      {/* ID, Status & Bezahlung */}
+                      <div className="grid grid-cols-3 gap-2 bg-gray-50/70 p-2.5 rounded-xl border border-gray-100 text-xs">
                         <div>
-                          <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block">Bestell-ID</span>
-                          <span className="font-mono text-xs text-gray-800 font-bold select-all">{order.id}</span>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase block">Bestell-ID</span>
+                          <span className="font-mono text-[11px] font-bold text-gray-700 truncate block">
+                            {order.id}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div>
-                            <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block mb-0.5">Status</span>
-                            <span className="inline-block bg-blue-50 text-blue-700 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border border-blue-100 capitalize">
-                              {status}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-400 block mb-0.5">Bezahlung</span>
-                            <span className="inline-block bg-amber-50 text-amber-700 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border border-amber-100 capitalize">
-                              {payment}
-                            </span>
-                          </div>
+
+                        <div>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase block">Status</span>
+                          <span className="inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-100 text-blue-800">
+                            {order.status || 'Eingegangen'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase block">Bezahlung</span>
+                          <span className="inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-900">
+                            {order.paymentStatus || 'Offen'}
+                          </span>
                         </div>
                       </div>
 
-                      {/* Items List */}
-                      <div>
-                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-                          Bestellte Artikel
-                        </h4>
-                        <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-100 shadow-2xs overflow-hidden">
-                          {order.items?.map((item, idx) => {
-                            const itemTotal = (item.price || 0) * (item.quantity || 1);
-                            return (
-                              <div key={idx} className="p-3.5 flex justify-between items-center text-xs sm:text-sm min-h-[44px]">
-                                <div>
-                                  <span className="font-semibold text-gray-900 block">{item.name}</span>
-                                  <span className="text-[11px] text-gray-400 mt-0.5 block">
-                                    {item.size ? `Größe: ${item.size}` : ''}
-                                    {item.size && item.color ? ' • ' : ''}
-                                    {item.color ? `Farbe: ${item.color}` : ''}
-                                    {!item.size && !item.color ? 'Standard' : ''}
-                                  </span>
-                                </div>
-                                <div className="text-right ml-4">
-                                  <span className="font-bold text-gray-900 block">{itemTotal.toFixed(2)} €</span>
-                                  <span className="text-[10px] text-gray-400 block">
-                                    {item.quantity}x à {item.price?.toFixed(2)} €
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      {/* Bestellte Artikel */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase block">Bestellte Artikel</span>
+                        {order.items?.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-xs bg-gray-50/40 p-2 rounded-lg">
+                            <div>
+                              <p className="font-bold text-gray-900">{item.name}</p>
+                              <p className="text-[10px] text-gray-400">
+                                {item.size ? `Größe: ${item.size}` : ''} {item.color ? `| Farbe: ${item.color}` : ''}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-gray-800">{(item.price * item.quantity).toFixed(2)} €</span>
+                              <p className="text-[10px] text-gray-400">{item.quantity}x a {item.price.toFixed(2)} €</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+
                 </div>
               );
             })}
           </div>
         )}
-      </div>
 
-      {/* Footer im Apple-Minimalist-Look */}
-      <footer className="mt-12 pt-6 border-t border-gray-100 text-[11px] text-gray-400 space-y-3 pb-safe">
-        <div className="flex flex-wrap justify-between items-center gap-2">
-          <div>
-            <span className="text-gray-400">App:</span> <span className="font-medium text-gray-700">MFA Webshop v1.2.0 MVP</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Entwickler:</span> <span className="font-medium text-gray-700">Jonas Salzer (RS Media)</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed border-gray-200/80 pt-3 text-center space-x-4">
-          <Link href="/imprint" className="hover:text-gray-900 active:text-black underline min-h-[44px] inline-flex items-center">Impressum</Link>
-          <span>•</span>
-          <Link href="/privacy" className="hover:text-gray-900 active:text-black underline min-h-[44px] inline-flex items-center">Datenschutz</Link>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
