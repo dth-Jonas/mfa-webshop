@@ -37,6 +37,9 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  
+  // State für ausklappbare Bestellungen (Set der geöffneten Order-IDs)
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'orders'), (snapshot) => {
@@ -60,6 +63,13 @@ export default function AdminPage() {
 
     return () => unsub();
   }, []);
+
+  const toggleOrder = (orderId: string) => {
+    setExpandedOrders((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId],
+    }));
+  };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
@@ -115,14 +125,25 @@ export default function AdminPage() {
         <div className="space-y-4">
           {orders.map((order) => {
             const currentStatus = order.paymentStatus || order.status || 'OFFEN';
+            const isExpanded = !!expandedOrders[order.id];
+            const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
             return (
-              <div key={order.id} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-                <div className="flex flex-wrap justify-between items-start border-b pb-4 gap-4">
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Kunde</span>
-                    <p className="text-sm font-bold text-gray-900">{order.userName || 'Unbekannt'}</p>
-                    <p className="text-xs text-gray-500">{order.userEmail}</p>
+              <div key={order.id} className="bg-white rounded-3xl border shadow-sm transition-all overflow-hidden">
+                {/* Header-Zeile (Klickbar zum Auf-/Zuklappen) */}
+                <div
+                  onClick={() => toggleOrder(order.id)}
+                  className="p-6 cursor-pointer hover:bg-gray-50/80 transition-colors flex flex-wrap justify-between items-center gap-4 select-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 font-bold transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                      ▶
+                    </span>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Kunde</span>
+                      <p className="text-sm font-bold text-gray-900">{order.userName || 'Unbekannt'}</p>
+                      <p className="text-xs text-gray-500">{order.userEmail}</p>
+                    </div>
                   </div>
 
                   <div>
@@ -137,7 +158,13 @@ export default function AdminPage() {
                     <p className="text-xs font-mono font-bold text-gray-600 mt-0.5">{order.id}</p>
                   </div>
 
-                  <div className="min-w-[180px]">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Gesamtsumme</span>
+                    <p className="text-sm font-black text-blue-600 mt-0.5">{order.totalAmount?.toFixed(2)} € <span className="text-[10px] text-gray-400 font-normal">({itemCount} Art.)</span></p>
+                  </div>
+
+                  {/* Dropdown stoppt Event-Propagation, damit das Klicken den Bereich nicht unabsichtlich einklappt */}
+                  <div className="min-w-[170px]" onClick={(e) => e.stopPropagation()}>
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                       Zahlungsstatus
                     </label>
@@ -145,7 +172,7 @@ export default function AdminPage() {
                       value={PAYMENT_STATUSES.includes(currentStatus) ? currentStatus : 'OFFEN'}
                       disabled={updatingId === order.id}
                       onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      className={`w-full text-xs font-bold px-3 py-2 rounded-xl border transition-all cursor-pointer ${getStatusBadgeStyle(
+                      className={`w-full text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${getStatusBadgeStyle(
                         currentStatus
                       )} ${updatingId === order.id ? 'opacity-50' : ''}`}
                     >
@@ -158,26 +185,29 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="divide-y border-b pb-3">
-                  {order.items?.map((item, idx) => (
-                    <div key={idx} className="py-2 flex justify-between items-center text-xs">
-                      <div>
-                        <p className="font-bold text-gray-900">{item.name}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
-                        </p>
-                      </div>
-                      <p className="font-bold text-gray-700">
-                        {item.quantity}x {item.price?.toFixed(2)} €
-                      </p>
+                {/* Ausklappbarer Bereich mit Details & Artikelliste */}
+                {isExpanded && (
+                  <div className="border-t bg-gray-50/50 p-6 space-y-4">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                      Bestellte Artikel
+                    </span>
+                    <div className="divide-y bg-white rounded-2xl border px-4">
+                      {order.items?.map((item, idx) => (
+                        <div key={idx} className="py-3 flex justify-between items-center text-xs">
+                          <div>
+                            <p className="font-bold text-gray-900">{item.name}</p>
+                            <p className="text-[10px] text-gray-400">
+                              {item.size && `Größe: ${item.size}`} {item.color && `| Farbe: ${item.color}`}
+                            </p>
+                          </div>
+                          <p className="font-bold text-gray-700">
+                            {item.quantity}x {item.price?.toFixed(2)} €
+                          </p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-
-                <div className="flex justify-between items-center pt-1 text-sm font-black">
-                  <span>Gesamtsumme:</span>
-                  <span className="text-blue-600 text-base">{order.totalAmount?.toFixed(2)} €</span>
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
