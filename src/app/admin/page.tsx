@@ -2,18 +2,51 @@
 
 import { useAuth } from '../../lib/auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
+interface Order {
+  id: string;
+  customerName?: string;
+  totalAmount?: number;
+  status?: string;
+  createdAt?: any;
+}
 
 export default function AdminPage() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
     if (!loading && (!user || !isAdmin)) {
       router.push('/');
     }
   }, [user, isAdmin, loading, router]);
+
+  useEffect(() => {
+    async function fetchRecentOrders() {
+      if (user && isAdmin) {
+        try {
+          const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5));
+          const snapshot = await getDocs(q);
+          const orders = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Order[];
+          setRecentOrders(orders);
+        } catch (error) {
+          console.error('Fehler beim Laden der Bestellungen:', error);
+        } finally {
+          setOrdersLoading(false);
+        }
+      }
+    }
+    fetchRecentOrders();
+  }, [user, isAdmin]);
 
   if (loading) {
     return <div className="p-8 text-center">Lade Berechtigungen...</div>;
@@ -24,8 +57,8 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8 pb-4 border-b">
+    <div className="p-8 max-w-7xl mx-auto space-y-8">
+      <div className="flex justify-between items-center pb-4 border-b">
         <div>
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-gray-600">Verwaltungssystem für Vereinstextilien</p>
@@ -47,12 +80,22 @@ export default function AdminPage() {
         </Link>
 
         <Link 
-          href="/admin/orders" 
+          href="/admin/order-windows" 
           className="p-6 bg-white border rounded-xl shadow-sm hover:shadow-md transition cursor-pointer"
         >
           <h2 className="text-xl font-bold mb-2 text-blue-600">Bestellfenster →</h2>
           <p className="text-gray-600 text-sm">
             Sammelbestellphasen öffnen, schließen und Fristen für Mitglieder festlegen.
+          </p>
+        </Link>
+
+        <Link 
+          href="/admin/orders" 
+          className="p-6 bg-white border rounded-xl shadow-sm hover:shadow-md transition cursor-pointer"
+        >
+          <h2 className="text-xl font-bold mb-2 text-blue-600">Alle Bestellungen →</h2>
+          <p className="text-gray-600 text-sm">
+            Gesamtübersicht aller eingegangenen Bestellungen einsehen und filtern.
           </p>
         </Link>
 
@@ -65,6 +108,50 @@ export default function AdminPage() {
             Bestellübersichten für Lieferanten generieren und Verteilerlisten exportieren.
           </p>
         </Link>
+
+        <Link 
+          href="/" 
+          className="p-6 bg-gray-50 border rounded-xl shadow-sm hover:shadow-md transition cursor-pointer"
+        >
+          <h2 className="text-xl font-bold mb-2 text-gray-800">Zum Shop →</h2>
+          <p className="text-gray-600 text-sm">
+            Zurück zur regulären Shop-Oberfläche wechseln.
+          </p>
+        </Link>
+      </div>
+
+      <div className="bg-white p-6 border rounded-xl shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Letzte 5 Bestellungen</h2>
+          <Link href="/admin/orders" className="text-sm text-blue-600 hover:underline">
+            Alle anzeigen
+          </Link>
+        </div>
+
+        {ordersLoading ? (
+          <p className="text-gray-500 text-sm py-4">Bestellungen werden geladen...</p>
+        ) : recentOrders.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">Noch keine Bestellungen vorhanden.</p>
+        ) : (
+          <div className="divide-y">
+            {recentOrders.map((order) => (
+              <div key={order.id} className="py-3 flex justify-between items-center text-sm">
+                <div>
+                  <span className="font-semibold block">{order.customerName || `Bestellung #${order.id.slice(0, 6)}`}</span>
+                  <span className="text-gray-500 text-xs">ID: {order.id}</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold block">
+                    {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '-'}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                    {order.status || 'Eingegangen'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
