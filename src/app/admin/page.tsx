@@ -10,6 +10,7 @@ import { db } from '../../lib/firebase';
 interface Order {
   id: string;
   customerName?: string;
+  userName?: string;
   totalAmount?: number;
   status?: string;
   createdAt?: any;
@@ -47,6 +48,18 @@ export default function AdminPage() {
     }
     fetchRecentOrders();
   }, [user, isAdmin]);
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Datum unbekannt';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
 
   if (loading) {
     return <div className="p-8 text-center">Lade Berechtigungen...</div>;
@@ -134,22 +147,27 @@ export default function AdminPage() {
           <p className="text-gray-500 text-sm py-4">Noch keine Bestellungen vorhanden.</p>
         ) : (
           <div className="divide-y">
-            {recentOrders.map((order) => (
-              <div key={order.id} className="py-3 flex justify-between items-center text-sm">
-                <div>
-                  <span className="font-semibold block">{order.customerName || `Bestellung #${order.id.slice(0, 6)}`}</span>
-                  <span className="text-gray-500 text-xs">ID: {order.id}</span>
+            {recentOrders.map((order) => {
+              const name = order.customerName || order.userName || 'Anonymer Besteller';
+              return (
+                <div key={order.id} className="py-3 flex justify-between items-center text-sm">
+                  <div>
+                    <span className="font-bold text-gray-900 text-base block">{name}</span>
+                    <span className="text-gray-500 text-xs block">
+                      {formatDate(order.createdAt)} • ID: {order.id.slice(0, 8)}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold block text-base">
+                      {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '-'}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">
+                      {order.status || 'Eingegangen'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-bold block">
-                    {order.totalAmount ? `${order.totalAmount.toFixed(2)} €` : '-'}
-                  </span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                    {order.status || 'Eingegangen'}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
