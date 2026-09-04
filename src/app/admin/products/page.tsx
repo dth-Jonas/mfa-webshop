@@ -55,8 +55,8 @@ export default function AdminProductsPage() {
     if (!name || !price) return alert('Name und Preis sind erforderlich.');
 
     const parsedPrice = parseFloat(price.replace(',', '.'));
-    const sizeArray = sizes ? sizes.split(',').map((s) => s.trim()) : [];
-    const colorArray = colors ? colors.split(',').map((c) => c.trim()) : [];
+    const sizeArray = sizes ? sizes.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const colorArray = colors ? colors.split(',').map((c) => c.trim()).filter(Boolean) : [];
 
     const productData = {
       name,
@@ -113,16 +113,20 @@ export default function AdminProductsPage() {
   };
 
   if (loading || fetching) {
-    return <div className="min-h-[70vh] flex items-center justify-center text-gray-400 font-medium text-sm">Produkte werden geladen...</div>;
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center text-gray-400 font-medium text-sm">
+        Produkte werden geladen...
+      </div>
+    );
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display',sans-serif] space-y-8">
-      {/* Top Bar */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/80 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Produktverwaltung</h1>
-          <p className="text-xs text-gray-500 mt-1">Erstelle und verwalte alle Produkte des Webshops</p>
+          <p className="text-xs text-gray-500 mt-1">Erstelle und verwalte alle Katalog-Produkte mit Varianten & Preisen</p>
         </div>
         <Link 
           href="/admin" 
@@ -133,11 +137,19 @@ export default function AdminProductsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Formular Panel */}
+        {/* Anlege- & Bearbeitungsformular */}
         <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs h-fit space-y-4">
-          <h2 className="text-lg font-bold text-gray-900 border-b pb-3">
-            {editingId ? 'Produkt bearbeiten' : 'Neues Produkt anlegen'}
-          </h2>
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h2 className="text-base font-bold text-gray-900">
+              {editingId ? 'Produkt bearbeiten' : 'Neues Produkt anlegen'}
+            </h2>
+            {editingId && (
+              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                Bearbeitungsmodus
+              </span>
+            )}
+          </div>
+
           <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
             <div>
               <label className="font-bold text-gray-500 uppercase block mb-1">Produktname *</label>
@@ -169,7 +181,7 @@ export default function AdminProductsPage() {
                   type="text"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="Jacken"
+                  placeholder="Oberbekleidung"
                   className="w-full min-h-[44px] px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
@@ -203,23 +215,23 @@ export default function AdminProductsPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                placeholder="Details zum Material etc."
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                placeholder="Details zur Materialbeschaffenheit oder Besonderheiten..."
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
               />
             </div>
 
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="submit"
-                className="flex-1 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all"
+                className="flex-1 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-xl transition-all shadow-xs"
               >
-                {editingId ? 'Aktualisieren' : 'Speichern'}
+                {editingId ? 'Änderungen speichern' : 'Produkt anlegen'}
               </button>
               {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="min-h-[44px] px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl"
+                  className="min-h-[44px] px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all"
                 >
                   Abbrechen
                 </button>
@@ -228,52 +240,72 @@ export default function AdminProductsPage() {
           </form>
         </div>
 
-        {/* Produktliste */}
+        {/* Produktkarten im Grid */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-bold text-gray-900">Existierende Produkte ({products.length})</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {products.map((p) => (
-              <div key={p.id} className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all space-y-3 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-bold text-base text-gray-900">{p.name}</h3>
-                    <span className="font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full text-xs">
-                      {p.price?.toFixed(2)} €
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 font-medium mt-0.5">{p.category || 'Allgemein'}</p>
-                  
-                  {p.description && (
-                    <p className="text-xs text-gray-600 mt-2 line-clamp-2">{p.description}</p>
-                  )}
-
-                  <div className="mt-3 space-y-1 text-[11px] text-gray-500">
-                    {p.sizes && p.sizes.length > 0 && (
-                      <div><strong className="text-gray-700">Größen:</strong> {p.sizes.join(', ')}</div>
-                    )}
-                    {p.colors && p.colors.length > 0 && (
-                      <div><strong className="text-gray-700">Farben:</strong> {p.colors.join(', ')}</div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={() => handleEdit(p)}
-                    className="flex-1 min-h-[36px] text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-all"
-                  >
-                    Bearbeiten
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="min-h-[36px] px-3 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-all"
-                  >
-                    Löschen
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">
+              Katalog ({products.length})
+            </h2>
           </div>
+
+          {products.length === 0 ? (
+            <div className="bg-white border border-gray-200/80 rounded-2xl p-12 text-center text-gray-400 shadow-xs">
+              Keine Produkte vorhanden.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {products.map((p) => (
+                <div key={p.id} className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex justify-between items-start gap-2">
+                      <h3 className="font-bold text-base text-gray-900 leading-snug">{p.name}</h3>
+                      <span className="font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full text-xs border border-blue-100/60 whitespace-nowrap">
+                        {p.price?.toFixed(2)} €
+                      </span>
+                    </div>
+
+                    <span className="inline-block mt-1 text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">
+                      {p.category || 'Allgemein'}
+                    </span>
+
+                    {p.description && (
+                      <p className="text-xs text-gray-600 mt-3 line-clamp-2 leading-relaxed">
+                        {p.description}
+                      </p>
+                    )}
+
+                    <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5 text-[11px]">
+                      {p.sizes && p.sizes.length > 0 && (
+                        <div className="text-gray-500">
+                          <strong className="text-gray-700 font-semibold">Größen:</strong> {p.sizes.join(', ')}
+                        </div>
+                      )}
+                      {p.colors && p.colors.length > 0 && (
+                        <div className="text-gray-500">
+                          <strong className="text-gray-700 font-semibold">Farben:</strong> {p.colors.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={() => handleEdit(p)}
+                      className="flex-1 min-h-[38px] text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all"
+                    >
+                      Bearbeiten
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p.id)}
+                      className="min-h-[38px] px-3.5 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-all"
+                    >
+                      Löschen
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
