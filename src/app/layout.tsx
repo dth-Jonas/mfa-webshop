@@ -1,13 +1,16 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '../lib/auth';
 
-const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'MFA Shop',
-  description: 'Mitglieder Shop & Bestellportal',
+export const metadata = {
+  title: 'Vereinsshop',
+  description: 'Bestellsystem für Vereinstextilien',
+  manifest: '/manifest.json',
+  themeColor: '#2563eb',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Vereinsshop',
+  },
 };
 
 export default function RootLayout({
@@ -17,8 +20,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <body className={inter.className}>
-        <AuthProvider>{children}</AuthProvider>
+      <body className="bg-gray-50 text-gray-900 antialiased min-h-screen">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
