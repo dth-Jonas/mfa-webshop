@@ -2,7 +2,7 @@
 
 import { useAuth } from '../../../lib/auth';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import Link from 'next/link';
 
@@ -31,8 +31,9 @@ export default function AdminOrderWindowsPage() {
 
   async function fetchWindows() {
     setFetching(true);
+    setErrorMessage(null);
     try {
-      const snapshot = await getDocs(collection(db, 'order_windows'));
+      const snapshot = await getDocs(collection(db, 'orderWindows'));
       const list = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
@@ -40,7 +41,7 @@ export default function AdminOrderWindowsPage() {
       setWindows(list);
     } catch (err) {
       console.error('Fehler beim Laden der Bestellfenster:', err);
-      setErrorMessage('Fehler beim Laden der Bestellfenster.');
+      setErrorMessage('Fehler beim Laden der Datenbank. Bitte Berechtigungen prüfen.');
     } finally {
       setFetching(false);
     }
@@ -55,21 +56,14 @@ export default function AdminOrderWindowsPage() {
       return;
     }
 
-    if (new Date(startDate) > new Date(endDate)) {
-      setErrorMessage('Das Startdatum darf nicht nach dem Enddatum liegen.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      // Neues Fenster erstellen (standardmäßig inaktiv)
-      await addDoc(collection(db, 'order_windows'), {
+      await addDoc(collection(db, 'orderWindows'), {
         title: title.trim(),
         startDate,
         endDate,
-        active: false,
-        createdAt: new Date().toISOString(),
+        active: true,
       });
 
       setTitle('');
@@ -78,7 +72,7 @@ export default function AdminOrderWindowsPage() {
       await fetchWindows();
     } catch (err) {
       console.error('Fehler beim Erstellen:', err);
-      setErrorMessage('Bestellfenster konnte nicht erstellt werden.');
+      setErrorMessage('Fehler beim Speichern in Firestore.');
     } finally {
       setIsSubmitting(false);
     }
@@ -86,41 +80,24 @@ export default function AdminOrderWindowsPage() {
 
   const handleToggleActive = async (targetWindow: OrderWindow) => {
     setErrorMessage(null);
-    const nextState = !targetWindow.active;
-
     try {
-      // Wenn wir ein Fenster aktivieren, deaktivieren wir gleichzeitig alle anderen (nur 1 aktives Fenster erlaubt)
-      if (nextState) {
-        for (const w of windows) {
-          if (w.id !== targetWindow.id && w.active) {
-            await updateDoc(doc(db, 'order_windows', w.id), { active: false });
-          }
-        }
-      }
-
-      await updateDoc(doc(db, 'order_windows', targetWindow.id), { active: nextState });
-
-      // Auch in einer globalen Config speichern für schnellen Frontend-Read
-      if (nextState) {
-        await setDoc(doc(db, 'config', 'active_order_window'), {
-          windowId: targetWindow.id,
-          title: targetWindow.title,
-          startDate: targetWindow.startDate,
-          endDate: targetWindow.endDate,
-          active: true,
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        await setDoc(doc(db, 'config', 'active_order_window'), {
-          active: false,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
+      await updateDoc(doc(db, 'orderWindows', targetWindow.id), {
+        active: !targetWindow.active,
+      });
       await fetchWindows();
     } catch (err) {
-      console.error('Fehler beim Ändern des Status:', err);
-      setErrorMessage('Statusänderung fehlgeschlagen.');
+      console.error('Fehler beim Ändern:', err);
+      setErrorMessage('Status konnte nicht geändert werden.');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Bestellfenster wirklich löschen?')) return;
+    try {
+      await deleteDoc(doc(db, 'orderWindows', id));
+      await fetchWindows();
+    } catch (err) {
+      console.error('Fehler beim Löschen:', err);
     }
   };
 
@@ -128,7 +105,7 @@ export default function AdminOrderWindowsPage() {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3 text-gray-500 font-medium text-sm">
         <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <span>Bestellfenster werden geladen...</span>
+        <span>Lade Bestellfenster...</span>
       </div>
     );
   }
@@ -140,25 +117,24 @@ export default function AdminOrderWindowsPage() {
           href="/admin" 
           className="inline-flex items-center text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-all mb-4"
         >
-          ← Zurück zum Dashboard
+          ← Zurück zum Control Center
         </Link>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
           Bestellfenster verwalten
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Definiere Zeiträume, in denen Mitarbeiter Produkte im Webshop bestellen können.
+          Definiere Zeiträume, in denen Mitglieder Produkte im Webshop bestellen können.
         </p>
       </div>
 
       {errorMessage && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-medium rounded-xl flex items-center justify-between">
           <span>{errorMessage}</span>
-          <button onClick={() => setErrorMessage(null)} className="text-red-500 hover:text-red-700 font-bold">×</button>
+          <button onClick={() => setErrorMessage(null)} className="text-red-500 font-bold ml-4">×</button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Formular */}
         <div className="lg:col-span-5 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5">
           <h2 className="text-base font-bold text-gray-900">Neues Fenster erstellen</h2>
 
@@ -200,67 +176,50 @@ export default function AdminOrderWindowsPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-all text-xs mt-2"
+              className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all text-xs"
             >
-              {isSubmitting ? 'Wird gespeichert...' : 'Bestellfenster aktivieren'}
+              {isSubmitting ? 'Speichere...' : 'Bestellfenster aktivieren'}
             </button>
           </form>
         </div>
 
-        {/* Liste */}
         <div className="lg:col-span-7 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-gray-900">
-            Eingerichtete Zeiträume ({windows.length})
-          </h2>
+          <h2 className="text-base font-bold text-gray-900">Eingerichtete Zeiträume ({windows.length})</h2>
 
           {windows.length === 0 ? (
             <p className="text-gray-400 text-xs py-4">Noch keine Bestellfenster angelegt.</p>
           ) : (
             <div className="space-y-3">
-              {windows.map((w) => {
-                const startFormatted = w.startDate ? new Date(w.startDate).toLocaleDateString('de-DE') : '-';
-                const endFormatted = w.endDate ? new Date(w.endDate).toLocaleDateString('de-DE') : '-';
-
-                return (
-                  <div
-                    key={w.id}
-                    className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-4 ${
-                      w.active ? 'bg-blue-50/40 border-blue-200' : 'bg-gray-50/30 border-gray-200'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-sm text-gray-900">{w.title}</h3>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            w.active
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-gray-200 text-gray-600'
-                          }`}
-                        >
-                          {w.active ? 'Inaktiv (Geklickt)' : 'Inaktiv'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Zeitraum: <span className="font-semibold">{startFormatted}</span> bis{' '}
-                        <span className="font-semibold">{endFormatted}</span>
-                      </p>
+              {windows.map((w) => (
+                <div key={w.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50/30 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-gray-900">{w.title}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${w.active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'}`}>
+                        {w.active ? 'Aktiv' : 'Inaktiv'}
+                      </span>
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {w.startDate} bis {w.endDate}
+                    </p>
+                  </div>
 
+                  <div className="flex items-center gap-2">
                     <button
-                      type="button"
                       onClick={() => handleToggleActive(w)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                        w.active
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
-                      }`}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700"
                     >
                       {w.active ? 'Deaktivieren' : 'Aktivieren'}
                     </button>
+                    <button
+                      onClick={() => handleDelete(w.id)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600"
+                    >
+                      Löschen
+                    </button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>

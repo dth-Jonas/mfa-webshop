@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-interface ActiveWindowData {
+interface OrderWindow {
   title?: string;
   startDate?: string;
   endDate?: string;
@@ -12,57 +12,43 @@ interface ActiveWindowData {
 }
 
 export default function OrderWindowBanner() {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-  const [endDateFormatted, setEndDateFormatted] = useState<string | null>(null);
+  const [activeWindow, setActiveWindow] = useState<OrderWindow | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Echtzeit-Listener auf die aktiven Fenster
-    const q = query(collection(db, 'order_windows'), where('active', '==', true));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        // KEIN AKTIVES FENSTER GEFUNDEN -> SHOP IST DEDEFINITIV GESCHLOSSEN
-        setIsOpen(false);
-        setEndDateFormatted(null);
-        setLoading(false);
-        return;
-      }
-
-      const activeDoc = snapshot.docs[0].data() as ActiveWindowData;
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      const start = activeDoc.startDate ? new Date(activeDoc.startDate) : null;
-      const end = activeDoc.endDate ? new Date(activeDoc.endDate) : null;
-
-      if (start) start.setHours(0, 0, 0, 0);
-      if (end) end.setHours(23, 59, 59, 999);
-
-      // Prüfe, ob heute im aktiven Datumsbereich liegt
-      const isWithinRange = (!start || now >= start) && (!end || now <= end);
-
-      if (activeDoc.active && isWithinRange) {
-        setIsOpen(true);
-        if (activeDoc.endDate) {
-          const formatted = new Date(activeDoc.endDate).toLocaleDateString('de-DE', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          });
-          setEndDateFormatted(formatted);
+    const unsubscribe = onSnapshot(
+      collection(db, 'orderWindows'),
+      (snapshot) => {
+        if (snapshot.empty) {
+          setActiveWindow(null);
+          setLoading(false);
+          return;
         }
-      } else {
-        setIsOpen(false);
-        setEndDateFormatted(null);
-      }
 
-      setLoading(false);
-    }, (err) => {
-      console.error("Fehler beim Abrufen des Bestellfensters:", err);
-      setIsOpen(false);
-      setLoading(false);
-    });
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        const found = snapshot.docs
+          .map((d) => d.data() as OrderWindow)
+          .find((w) => {
+            if (!w.active) return false;
+            const start = w.startDate ? new Date(w.startDate) : null;
+            const end = w.endDate ? new Date(w.endDate) : null;
+            if (start) start.setHours(0, 0, 0, 0);
+            if (end) end.setHours(23, 59, 59, 999);
+
+            return (!start || now >= start) && (!end || now <= end);
+          });
+
+        setActiveWindow(found || null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Banner Firestore Error:', err);
+        setActiveWindow(null);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, []);
@@ -75,21 +61,27 @@ export default function OrderWindowBanner() {
     );
   }
 
-  if (!isOpen) {
+  if (!activeWindow) {
     return (
-      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-50 text-red-700 border border-red-200/80 text-xs font-semibold shadow-2xs">
+      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-50 text-red-700 border border-red-200/80 text-xs font-semibold">
         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
         <span>Bestellfenster aktuell geschlossen</span>
       </div>
     );
   }
 
+  const formattedEnd = activeWindow.endDate
+    ? new Date(activeWindow.endDate).toLocaleDateString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+    : '';
+
   return (
-    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold shadow-2xs">
+    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold">
       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-      <span>
-        Bestellfenster geöffnet {endDateFormatted ? `bis ${endDateFormatted}` : ''}
-      </span>
+      <span>Bestellfenster geöffnet {formattedEnd ? `bis ${formattedEnd}` : ''}</span>
     </div>
   );
 }
