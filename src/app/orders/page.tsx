@@ -22,7 +22,6 @@ interface Order {
   totalAmount: number;
   status?: string;
   paymentStatus?: string;
-  paymentMethod?: string;
 }
 
 export default function CustomerOrdersPage() {
@@ -108,8 +107,8 @@ export default function CustomerOrdersPage() {
         <div className="space-y-4">
           {orders.map((order) => {
             const isExpanded = !!expandedOrders[order.id];
-            const payment = order.paymentStatus || order.paymentMethod || 'offen';
-            const status = order.status || 'Eingegangen';
+            const payment = order.paymentStatus || 'offen';
+            const status = order.status || 'eingegangen';
 
             return (
               <div key={order.id} className="bg-white border rounded-xl shadow-sm overflow-hidden">
@@ -145,13 +144,13 @@ export default function CustomerOrdersPage() {
                   <div className="flex gap-2">
                     <div>
                       <span className="text-xs text-gray-400 font-mono block">STATUS</span>
-                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-blue-200">
+                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-blue-200 capitalize">
                         {status}
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-400 font-mono block">BEZAHLUNG</span>
-                      <span className="inline-block bg-amber-50 text-amber-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200 uppercase">
+                      <span className="inline-block bg-amber-50 text-amber-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200 capitalize">
                         {payment}
                       </span>
                     </div>

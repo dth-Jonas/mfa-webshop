@@ -25,7 +25,6 @@ interface Order {
   totalAmount: number;
   status?: string;
   paymentStatus?: string;
-  paymentMethod?: string;
 }
 
 export default function AdminOrdersPage() {
@@ -44,7 +43,6 @@ export default function AdminOrdersPage() {
           ...docSnap.data(),
         })) as Order[];
 
-        // Sortierung direkt client-seitig (neueste zuerst)
         fetchedOrders.sort((a, b) => {
           const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
           const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
@@ -141,7 +139,7 @@ export default function AdminOrdersPage() {
         <div className="space-y-4">
           {orders.map((order) => {
             const isExpanded = !!expandedOrders[order.id];
-            const currentStatus = order.status || 'Eingegangen';
+            const currentStatus = order.status || 'eingegangen';
             const currentPayment = order.paymentStatus || 'offen';
 
             return (
@@ -176,20 +174,18 @@ export default function AdminOrdersPage() {
                     </span>
                   </div>
 
-                  {/* Interaktive Selects für Admin */}
                   <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <div>
                       <span className="text-xs text-gray-400 font-mono block mb-1">STATUS</span>
                       <select
                         value={currentStatus}
                         onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                        className="text-xs border rounded p-1 bg-white font-semibold text-blue-700"
+                        className="text-xs border rounded p-1 bg-white font-semibold text-blue-700 capitalize"
                       >
-                        <option value="Eingegangen">Eingegangen</option>
-                        <option value="In Bearbeitung">In Bearbeitung</option>
-                        <option value="Bestellt beim Lieferanten">Bestellt beim Lieferanten</option>
-                        <option value="Abholbereit">Abholbereit</option>
-                        <option value="Abgeschlossen">Abgeschlossen</option>
+                        <option value="eingegangen">eingegangen</option>
+                        <option value="in bearbeitung">in bearbeitung</option>
+                        <option value="abholbereit">abholbereit</option>
+                        <option value="abgeschlossen">abgeschlossen</option>
                       </select>
                     </div>
 
@@ -198,10 +194,12 @@ export default function AdminOrdersPage() {
                       <select
                         value={currentPayment}
                         onChange={(e) => updatePaymentStatus(order.id, e.target.value)}
-                        className="text-xs border rounded p-1 bg-white font-semibold text-amber-700 uppercase"
+                        className="text-xs border rounded p-1 bg-white font-semibold text-amber-700 capitalize"
                       >
-                        <option value="offen">Offen</option>
-                        <option value="bezahlt">Bezahlt</option>
+                        <option value="offen">offen</option>
+                        <option value="paypal">paypal</option>
+                        <option value="bar">bar</option>
+                        <option value="überweisung">überweisung</option>
                       </select>
                     </div>
                   </div>
