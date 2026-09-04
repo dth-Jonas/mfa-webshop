@@ -2,7 +2,7 @@
 
 import { useAuth } from '../../../lib/auth';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import Link from 'next/link';
 
@@ -15,173 +15,252 @@ interface OrderWindow {
 }
 
 export default function AdminOrderWindowsPage() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [windows, setWindows] = useState<OrderWindow[]>([]);
   const [fetching, setFetching] = useState(true);
 
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWindows();
-  }, [user, loading]);
+  }, [user, authLoading]);
 
   async function fetchWindows() {
+    setFetching(true);
     try {
-      const snapshot = await getDocs(collection(db, 'orderWindows'));
+      const snapshot = await getDocs(collection(db, 'order_windows'));
       const list = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       })) as OrderWindow[];
       setWindows(list);
     } catch (err) {
-      console.error('Fehler beim Laden:', err);
+      console.error('Fehler beim Laden der Bestellfenster:', err);
+      setErrorMessage('Fehler beim Laden der Bestellfenster.');
     } finally {
       setFetching(false);
     }
   }
 
-  const handleCreateWindow = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !startDate || !endDate) return alert('Bitte alle Felder ausfüllen.');
+    setErrorMessage(null);
+
+    if (!title.trim() || !startDate || !endDate) {
+      setErrorMessage('Bitte alle Felder vollständig ausfüllen.');
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      setErrorMessage('Das Startdatum darf nicht nach dem Enddatum liegen.');
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'orderWindows'), {
-        title,
+      // Neues Fenster erstellen (standardmäßig inaktiv)
+      await addDoc(collection(db, 'order_windows'), {
+        title: title.trim(),
         startDate,
         endDate,
-        active: true,
+        active: false,
+        createdAt: new Date().toISOString(),
       });
+
       setTitle('');
       setStartDate('');
       setEndDate('');
-      fetchWindows();
+      await fetchWindows();
     } catch (err) {
       console.error('Fehler beim Erstellen:', err);
+      setErrorMessage('Bestellfenster konnte nicht erstellt werden.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const toggleActive = async (w: OrderWindow) => {
+  const handleToggleActive = async (targetWindow: OrderWindow) => {
+    setErrorMessage(null);
+    const nextState = !targetWindow.active;
+
     try {
-      await updateDoc(doc(db, 'orderWindows', w.id), {
-        active: !w.active,
-      });
-      fetchWindows();
+      // Wenn wir ein Fenster aktivieren, deaktivieren wir gleichzeitig alle anderen (nur 1 aktives Fenster erlaubt)
+      if (nextState) {
+        for (const w of windows) {
+          if (w.id !== targetWindow.id && w.active) {
+            await updateDoc(doc(db, 'order_windows', w.id), { active: false });
+          }
+        }
+      }
+
+      await updateDoc(doc(db, 'order_windows', targetWindow.id), { active: nextState });
+
+      // Auch in einer globalen Config speichern für schnellen Frontend-Read
+      if (nextState) {
+        await setDoc(doc(db, 'config', 'active_order_window'), {
+          windowId: targetWindow.id,
+          title: targetWindow.title,
+          startDate: targetWindow.startDate,
+          endDate: targetWindow.endDate,
+          active: true,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        await setDoc(doc(db, 'config', 'active_order_window'), {
+          active: false,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      await fetchWindows();
     } catch (err) {
-      console.error('Fehler beim Umschalten:', err);
+      console.error('Fehler beim Ändern des Status:', err);
+      setErrorMessage('Statusänderung fehlgeschlagen.');
     }
   };
 
-  if (loading || fetching) {
+  if (authLoading || fetching) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center text-gray-400 text-sm font-medium">
-        Lade Bestellfenster...
+      <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3 text-gray-500 font-medium text-sm">
+        <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <span>Bestellfenster werden geladen...</span>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display',sans-serif] space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/80 pb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">Bestellfenster verwalten</h1>
-          <p className="text-xs text-gray-500 mt-1">Definiere Zeiträume, in denen Mitglieder Produkte im Webshop bestellen können</p>
-        </div>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI','Roboto',sans-serif] space-y-8">
+      <div>
         <Link 
           href="/admin" 
-          className="inline-flex items-center justify-center min-h-[44px] px-4 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200/80 rounded-xl transition-all"
+          className="inline-flex items-center text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-all mb-4"
         >
-          ← Zurück zum Control Center
+          ← Zurück zum Dashboard
         </Link>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
+          Bestellfenster verwalten
+        </h1>
+        <p className="text-xs text-gray-500 mt-1">
+          Definiere Zeiträume, in denen Mitarbeiter Produkte im Webshop bestellen können.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Formular für neues Bestellfenster */}
-        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs h-fit space-y-4">
-          <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">Neues Fenster erstellen</h2>
-          <form onSubmit={handleCreateWindow} className="space-y-4 text-xs">
+      {errorMessage && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-medium rounded-xl flex items-center justify-between">
+          <span>{errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} className="text-red-500 hover:text-red-700 font-bold">×</button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Formular */}
+        <div className="lg:col-span-5 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5">
+          <h2 className="text-base font-bold text-gray-900">Neues Fenster erstellen</h2>
+
+          <form onSubmit={handleCreate} className="space-y-4 text-xs">
             <div>
-              <label className="font-bold text-gray-500 uppercase block mb-1">Titel / Bezeichnung *</label>
+              <label className="font-bold text-gray-500 uppercase block mb-1">TITEL / BEZEICHNUNG *</label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="z.B. Sommerbestellung 2026"
-                className="w-full min-h-[44px] px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                placeholder="z.B. Herbst Aktion 2026"
+                className="w-full min-h-[44px] px-3.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
                 required
               />
             </div>
+
             <div>
-              <label className="font-bold text-gray-500 uppercase block mb-1">Startdatum *</label>
+              <label className="font-bold text-gray-500 uppercase block mb-1">STARTDATUM *</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full min-h-[44px] px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full min-h-[44px] px-3.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
                 required
               />
             </div>
+
             <div>
-              <label className="font-bold text-gray-500 uppercase block mb-1">Enddatum *</label>
+              <label className="font-bold text-gray-500 uppercase block mb-1">ENDDATUM *</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full min-h-[44px] px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full min-h-[44px] px-3.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
                 required
               />
             </div>
+
             <button
               type="submit"
-              className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-xl transition-all shadow-xs"
+              disabled={isSubmitting}
+              className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold rounded-xl transition-all text-xs mt-2"
             >
-              Bestellfenster aktivieren
+              {isSubmitting ? 'Wird gespeichert...' : 'Bestellfenster aktivieren'}
             </button>
           </form>
         </div>
 
-        {/* Liste aller Bestellfenster */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-bold text-gray-900">Eingerichtete Zeiträume ({windows.length})</h2>
-          
+        {/* Liste */}
+        <div className="lg:col-span-7 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+          <h2 className="text-base font-bold text-gray-900">
+            Eingerichtete Zeiträume ({windows.length})
+          </h2>
+
           {windows.length === 0 ? (
-            <div className="bg-white border border-gray-200/80 rounded-2xl p-12 text-center text-gray-400 shadow-xs">
-              Keine Bestellfenster konfiguriert.
-            </div>
+            <p className="text-gray-400 text-xs py-4">Noch keine Bestellfenster angelegt.</p>
           ) : (
             <div className="space-y-3">
-              {windows.map((w) => (
-                <div key={w.id} className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-base text-gray-900">{w.title}</h3>
-                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                        w.active 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                          : 'bg-gray-100 text-gray-500 border-gray-200'
-                      }`}>
-                        {w.active ? 'Aktiv' : 'Inaktiv'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Zeitraum: <strong className="text-gray-700">{w.startDate}</strong> bis <strong className="text-gray-700">{w.endDate}</strong>
-                    </p>
-                  </div>
+              {windows.map((w) => {
+                const startFormatted = w.startDate ? new Date(w.startDate).toLocaleDateString('de-DE') : '-';
+                const endFormatted = w.endDate ? new Date(w.endDate).toLocaleDateString('de-DE') : '-';
 
-                  <button
-                    onClick={() => toggleActive(w)}
-                    className={`min-h-[40px] px-4 text-xs font-semibold rounded-xl transition-all ${
-                      w.active 
-                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/60' 
-                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60'
+                return (
+                  <div
+                    key={w.id}
+                    className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-4 ${
+                      w.active ? 'bg-blue-50/40 border-blue-200' : 'bg-gray-50/30 border-gray-200'
                     }`}
                   >
-                    {w.active ? 'Deaktivieren' : 'Aktivieren'}
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-sm text-gray-900">{w.title}</h3>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            w.active
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {w.active ? 'Inaktiv (Geklickt)' : 'Inaktiv'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Zeitraum: <span className="font-semibold">{startFormatted}</span> bis{' '}
+                        <span className="font-semibold">{endFormatted}</span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(w)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        w.active
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
+                      }`}
+                    >
+                      {w.active ? 'Deaktivieren' : 'Aktivieren'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
