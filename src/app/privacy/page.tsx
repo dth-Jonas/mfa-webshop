@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           <strong>Wofür nutzen wir Ihre Daten?</strong><br />
-          Ein Teil der Daten wird erhoben, um eine fehlerfreie Bereitstellung der Website zu gewährleisten. Andere Daten (wie Ihre Bestellhistorie) können zur Abwicklung Ihrer Club-Textilbestellungen verwendet werden.
+          Ein Teil der Daten wird erhoben, um eine fehlerfreie Bereitstellung der Website zu gewährleisten. Andere Daten (wie Ihre Bestellhistorie) können zur Abwicklung Ihrer Bestellung verwendet werden.
         </p>
 
         <h2 className="font-bold text-base text-gray-900">3. Ihre Rechte</h2>

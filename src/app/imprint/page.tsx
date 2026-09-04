@@ -11,23 +11,28 @@ export default function ImprintPage() {
       </div>
       
       <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
-        <h2 className="font-bold text-base text-gray-900">Angaben gemäß § 5 TMG</h2>
+        <h2 className="font-bold text-base text-gray-900">Angaben gemäß § 5 DDG</h2>
         <p>
-          Jonas Salzer (RS Media)<br />
-          Musterstraße 1<br />
-          57627 Hachenburg
+          RS Media<br />
+          Jonas Salzer<br />
+          57642 Alpenrod
         </p>
 
         <h2 className="font-bold text-base text-gray-900">Kontakt</h2>
         <p>
-          E-Mail: info@jonassalzer.de
+          E-Mail: salzer@r-s-media.de
         </p>
 
-        <h2 className="font-bold text-base text-gray-900">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
+        <h2 className="font-bold text-base text-gray-900">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
         <p>
           Jonas Salzer<br />
-          Musterstraße 1<br />
-          57627 Hachenburg
+          RS Media<br />
+          57642 Alpenrod
+        </p>
+
+        <h2 className="font-bold text-base text-gray-900">Haftungsausschluss & Urheberrecht</h2>
+        <p>
+          Die Inhalte unserer Seiten wurden mit größter Sorgfalt erstellt. Für die Richtigkeit, Vollständigkeit und Aktualität der Inhalte können wir jedoch keine Gewähr übernehmen. Das Urheberrecht an allen Inhalten dieser Web-App (MFA-Webshop) liegt bei Jonas Salzer (RS Media).
         </p>
       </div>
     </div>
